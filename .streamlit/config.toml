@@ -1,0 +1,15 @@
+# Streamlit 主题与服务配置
+[theme]
+base = "light"                      # 固定浅色主题，避免深色模式下黑字看不清
+primaryColor = "#2B6CB0"
+backgroundColor = "#F5F7FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1A202C"
+font = "sans serif"
+
+[server]
+headless = true
+port = 8501
+
+[browser]
+gatherUsageStats = false
