@@ -6,21 +6,23 @@
 <title>校园志愿时长汇总助手 · 课程汇报</title>
 <style>
   :root {
-    --paper: #FBFAF7;
-    --ink: #16202A;
-    --body: #33414F;
-    --muted: #74838F;
-    --line: #DCE2E7;
-    --line-soft: #EAEEF1;
-    --accent: #1F5FA8;
-    --accent-soft: #EAF1F8;
-    --teal: #0E6E72;
-    --code-bg: #15242E;
+    --ink: #0F172A;
+    --body: #3B4A5A;
+    --muted: #7B8A99;
+    --line: #E4EAF1;
+    --paper: #FFFFFF;
+    --bg: #EEF2F7;
+    --blue: #2563EB;
+    --teal: #0D9488;
+    --amber: #D97706;
+    --violet: #7C3AED;
+    --rose: #E11D48;
+    --ac: #2563EB;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     height: 100%;
-    background: #E7EBEE;
+    background: var(--bg);
     color: var(--body);
     font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
     overflow: hidden;
@@ -30,462 +32,546 @@
 
   .deck { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 
+  /* ============ 幻灯片基础 ============ */
   .slide {
     position: absolute; inset: 0;
     background: var(--paper);
-    padding: 2.2rem 3rem 1.6rem;
+    padding: 2.1rem 2.8rem 1.5rem;
     display: none;
     flex-direction: column;
-    border-top: .22rem solid var(--accent);
+    align-items: center;
+    overflow: hidden;
   }
   .slide.active { display: flex; }
-
-  /* ---------- 页眉 / 页脚 ---------- */
-  .runhead {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding-bottom: .5rem; border-bottom: .05rem solid var(--line);
-    font-size: .7rem; letter-spacing: .1em; color: var(--muted);
-    text-transform: uppercase;
+  .slide::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: .28rem;
+    background: var(--ac);
+    background: linear-gradient(90deg, var(--ac), color-mix(in srgb, var(--ac) 35%, #fff));
   }
-  .runhead .right { font-family: Consolas, monospace; letter-spacing: .04em; }
-  .footline {
-    margin-top: auto; padding-top: .55rem; border-top: .05rem solid var(--line-soft);
-    display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted);
+  /* 顶部水印光斑 */
+  .slide::after {
+    content: ""; position: absolute; right: -6rem; top: -8rem;
+    width: 22rem; height: 22rem; border-radius: 50%;
+    background: rgba(37, 99, 235, .06);
+    background: radial-gradient(circle, color-mix(in srgb, var(--ac) 12%, transparent), transparent 68%);
+    pointer-events: none;
   }
 
-  /* ---------- 标题区 ---------- */
-  .head { margin: 1.15rem 0 .95rem; }
-  .eyebrow {
-    font-size: .72rem; letter-spacing: .16em; color: var(--accent);
-    font-weight: 700; margin-bottom: .32rem; text-transform: uppercase;
+  /* ============ 标题区（居中） ============ */
+  .hd { text-align: center; width: 100%; max-width: 64rem; margin-bottom: 1.15rem; flex: none; }
+  .kicker {
+    display: inline-block; font-size: .72rem; letter-spacing: .22em; font-weight: 800;
+    color: var(--ac); text-transform: uppercase; margin-bottom: .5rem;
   }
-  h1 { font-size: 2.15rem; line-height: 1.34; color: var(--ink); font-weight: 700; letter-spacing: .01em; }
-  h2 { font-size: 1.5rem; line-height: 1.36; color: var(--ink); font-weight: 700; }
-  .dek { font-size: .86rem; color: var(--muted); margin-top: .38rem; line-height: 1.65; max-width: 52rem; }
-  .rule { width: 2.2rem; height: .13rem; background: var(--accent); margin-top: .6rem; }
+  .kicker::before, .kicker::after {
+    content: ""; display: inline-block; width: 1.5rem; height: .08rem; background: var(--ac);
+    vertical-align: middle; margin: 0 .55rem; opacity: .55;
+  }
+  h1 { font-size: 3rem; line-height: 1.26; color: var(--ink); font-weight: 800; letter-spacing: .01em; }
+  h2 { font-size: 1.72rem; line-height: 1.4; color: var(--ink); font-weight: 800; }
+  h2 em {
+    font-style: normal; color: var(--ac);
+    background: rgba(37, 99, 235, .15);
+    background: linear-gradient(transparent 62%, color-mix(in srgb, var(--ac) 18%, transparent) 62%);
+    padding: 0 .1rem;
+  }
+  .dek { font-size: .84rem; color: var(--muted); margin-top: .42rem; line-height: 1.65; }
 
-  p, li { font-size: .9rem; line-height: 1.78; color: var(--body); }
-  ul, ol { padding-left: 1.1rem; }
-  li { margin-bottom: .3rem; }
-  b, strong { color: var(--ink); font-weight: 700; }
-  .hl { color: var(--accent); font-weight: 700; }
+  .wrap { width: 100%; max-width: 64rem; }
+
+  p, li { font-size: .86rem; line-height: 1.75; color: var(--body); text-align: left; }
+  ul { padding-left: 1.05rem; }
+  li { margin-bottom: .26rem; }
+  b, strong { color: var(--ink); font-weight: 800; }
   code {
-    font-family: Consolas, monospace; font-size: .82rem;
-    background: #EEF2F5; border-radius: .16rem; padding: .04rem .32rem; color: #1B4F7E;
+    font-family: Consolas, monospace; font-size: .78rem;
+    background: #EFF3F7; border-radius: .16rem; padding: .03rem .3rem; color: #1B4F7E;
   }
-  .small { font-size: .78rem; color: var(--muted); line-height: 1.7; }
+  .small { font-size: .76rem; color: var(--muted); line-height: 1.65; }
 
-  /* ---------- 封面 ---------- */
-  .cover { justify-content: center; padding: 0 5rem; }
-  .cover .tagline { font-size: .74rem; letter-spacing: .22em; color: var(--accent); font-weight: 700; }
-  .cover h1 { font-size: 2.9rem; margin: 1rem 0 .7rem; }
-  .cover .desc { font-size: 1rem; color: var(--muted); line-height: 1.9; max-width: 45rem; }
-  .cover .divider { width: 100%; height: .05rem; background: var(--line); margin: 2rem 0 1.3rem; }
-  .cover .meta { display: flex; gap: 3.6rem; }
-  .cover .meta div { font-size: .82rem; color: var(--body); }
-  .cover .meta span { display: block; font-size: .68rem; letter-spacing: .12em; color: var(--muted); margin-bottom: .22rem; }
+  /* ============ 入场动画 ============ */
+  .rv { opacity: 0; }
+  .slide.active .rv {
+    animation: rise .6s cubic-bezier(.22,.75,.28,1) both;
+    animation-delay: var(--d, 0s);
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(1rem); }
+    to { opacity: 1; transform: none; }
+  }
+  .slide.active .zoom { animation: zoom .7s cubic-bezier(.22,.75,.28,1) both; animation-delay: var(--d, 0s); }
+  @keyframes zoom { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
 
-  /* ---------- 栅格 ---------- */
-  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.7rem; }
-  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
-  .g5-7 { display: grid; grid-template-columns: 5fr 7fr; gap: 1.7rem; }
-  .g7-5 { display: grid; grid-template-columns: 7fr 5fr; gap: 1.7rem; }
-  .stack { display: flex; flex-direction: column; gap: .85rem; }
+  /* ============ 封面 ============ */
+  .cover { justify-content: center; background: #0B1220; padding: 0; }
+  .cover::before { display: none; }
+  .cover::after { display: none; }
+  .cover .glow {
+    position: absolute; border-radius: 50%; filter: blur(2.4rem); opacity: .55;
+  }
+  .cover .g1 { width: 26rem; height: 26rem; left: -6rem; top: -6rem; background: #1D4ED8; animation: float1 14s ease-in-out infinite; }
+  .cover .g2 { width: 22rem; height: 22rem; right: -4rem; bottom: -6rem; background: #0D9488; animation: float2 17s ease-in-out infinite; }
+  .cover .g3 { width: 16rem; height: 16rem; right: 18%; top: -5rem; background: #7C3AED; opacity: .4; animation: float1 20s ease-in-out infinite reverse; }
+  @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(2.2rem,1.6rem); } }
+  @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-2rem,-1.4rem); } }
 
-  /* ---------- 数字指标 ---------- */
-  .metrics { display: flex; gap: 2.2rem; }
-  .metric .n { font-size: 1.85rem; font-weight: 700; color: var(--ink); line-height: 1.1; font-family: Consolas, monospace; }
-  .metric .n em { font-size: .9rem; font-style: normal; color: var(--muted); margin-left: .18rem; font-family: inherit; }
-  .metric .l { font-size: .72rem; color: var(--muted); margin-top: .28rem; }
+  .cover .inner {
+    position: relative; z-index: 2; text-align: center; max-width: 58rem;
+    color: #fff; padding: 0 2rem;
+  }
+  .cover .tag {
+    display: inline-block; font-size: .72rem; letter-spacing: .24em; font-weight: 700;
+    color: #A5C4FF; border: .06rem solid rgba(165,196,255,.4); border-radius: 99rem;
+    padding: .34rem 1rem; margin-bottom: 1.4rem; backdrop-filter: blur(4px);
+  }
+  .cover h1 {
+    font-size: 3.35rem; line-height: 1.2; color: #fff; letter-spacing: .02em;
+    background: linear-gradient(100deg, #fff 20%, #A8C7FF 55%, #7FE3D6 90%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .cover .sub { font-size: 1rem; color: #B9C6DC; margin-top: .85rem; line-height: 1.8; }
+  .cover .chips { display: flex; gap: .55rem; justify-content: center; margin-top: 1.7rem; flex-wrap: wrap; }
+  .cover .chip {
+    font-size: .74rem; color: #D7E3F5; background: rgba(255,255,255,.09);
+    border: .05rem solid rgba(255,255,255,.16); border-radius: 99rem; padding: .34rem .95rem;
+  }
+  .cover .metaline {
+    margin-top: 2.3rem; padding-top: 1.3rem; border-top: .05rem solid rgba(255,255,255,.14);
+    display: flex; gap: 3rem; justify-content: center; flex-wrap: wrap;
+  }
+  .cover .metaline div { font-size: .8rem; color: #E2EAF5; }
+  .cover .metaline span { display: block; font-size: .66rem; letter-spacing: .14em; color: #7E8FA8; margin-bottom: .26rem; }
+  .cover .scrollhint {
+    position: absolute; bottom: 1.15rem; left: 50%; transform: translateX(-50%);
+    font-size: .7rem; color: #6E8099; z-index: 2; letter-spacing: .1em;
+  }
 
-  /* ---------- 表格 ---------- */
+  /* ============ 指标 ============ */
+  .kpis { display: flex; justify-content: center; gap: 1rem; }
+  .kpi {
+    flex: 1; max-width: 12rem; text-align: center; padding: 1.1rem .8rem;
+    border-radius: .7rem; border: .05rem solid var(--line); background: #fff;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .kpi:hover { transform: translateY(-.2rem); box-shadow: 0 .5rem 1.2rem rgba(15,23,42,.07); }
+  .kpi .v {
+    font-family: Consolas, monospace; font-size: 1.9rem; font-weight: 800; line-height: 1.1;
+    color: var(--ac);
+  }
+  .kpi .v i { font-style: normal; font-size: .8rem; color: var(--muted); margin-left: .12rem; }
+  .kpi .k { font-size: .74rem; color: var(--muted); margin-top: .35rem; }
+
+  /* ============ 卡片 ============ */
+  .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+  .cards4 { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
+  .card {
+    background: #fff; border: .05rem solid var(--line); border-radius: .6rem;
+    padding: .9rem 1.05rem; position: relative; overflow: hidden;
+  }
+  .card.top { border-top: .18rem solid var(--c, var(--ac)); }
+  .card .ct { font-size: .84rem; font-weight: 800; color: var(--ink); margin-bottom: .32rem; }
+  .card .cd { font-size: .78rem; color: var(--body); line-height: 1.65; }
+  .card .badge {
+    display: inline-block; font-size: .66rem; font-weight: 800; letter-spacing: .06em;
+    color: var(--c, var(--ac)); background: #F1F5F9;
+    background: color-mix(in srgb, var(--c, var(--ac)) 10%, #fff);
+    border-radius: .2rem; padding: .1rem .42rem; margin-bottom: .4rem;
+  }
+
+  /* ============ 架构层 ============ */
+  .arch { display: flex; flex-direction: column; align-items: center; gap: .3rem; }
+  .layer {
+    width: 42rem; display: flex; align-items: center; gap: .9rem;
+    border: .05rem solid var(--line); border-left: .24rem solid var(--c);
+    border-radius: .3rem; background: #fff; padding: .5rem .85rem;
+  }
+  .layer .ln {
+    font-family: Consolas, monospace; font-size: .7rem; font-weight: 800;
+    color: var(--c); background: #EEF3F8;
+    background: color-mix(in srgb, var(--c) 12%, #fff);
+    border-radius: .2rem; padding: .08rem .38rem; flex: none;
+  }
+  .layer .nm { font-size: .8rem; font-weight: 800; color: var(--ink); flex: none; width: 6.4rem; text-align: left; }
+  .layer .ds { font-size: .74rem; color: var(--muted); text-align: left; line-height: 1.5; }
+  .layer .ds code { font-size: .7rem; }
+  .vstep {
+    font-family: Consolas, monospace; font-size: .66rem; color: var(--muted);
+    display: flex; align-items: center; gap: .35rem;
+  }
+  .vstep::before { content: "↓"; color: var(--ac); font-size: .8rem; }
+
+  /* ============ 工具卡 ============ */
+  .tool { text-align: center; padding: 1rem .85rem .9rem; border-radius: .6rem; border: .05rem solid var(--line); background: #fff; }
+  .tool .ic {
+    width: 2.3rem; height: 2.3rem; margin: 0 auto .55rem; border-radius: .55rem;
+    display: flex; align-items: center; justify-content: center;
+    background: #EEF4FF;
+    background: color-mix(in srgb, var(--c) 12%, #fff); color: var(--c);
+    font-size: 1.1rem; font-weight: 800; font-family: Consolas, monospace;
+  }
+  .tool .nm { font-family: Consolas, monospace; font-size: .74rem; font-weight: 800; color: var(--ink); margin-bottom: .45rem; word-break: break-all; }
+  .tool .pr { font-size: .74rem; color: var(--body); line-height: 1.7; }
+  .tool .pr b { color: var(--c); font-weight: 700; }
+  .tool .rt {
+    margin-top: .6rem; padding-top: .55rem; border-top: .05rem dashed var(--line);
+    font-size: .72rem; color: var(--muted); line-height: 1.6; text-align: left;
+  }
+
+  /* ============ 代码块 ============ */
+  .code {
+    background: #0E1A26; border-radius: .4rem; padding: .8rem .95rem;
+    font-family: Consolas, monospace; font-size: .7rem; line-height: 1.75;
+    color: #CBD8E2; text-align: left; overflow: hidden;
+  }
+  .code .k { color: #7FB6E8; }
+  .code .s { color: #A8DB8A; }
+  .code .c { color: #64798B; }
+  .code .t { color: #E7BE7C; }
+
+  /* ============ 时序 ============ */
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: .38rem 1.6rem; }
+  .step {
+    display: grid; grid-template-columns: 1.5rem 1fr; gap: .55rem; align-items: start;
+    padding: .3rem 0;
+  }
+  .step .n {
+    width: 1.5rem; height: 1.5rem; border-radius: 50%; flex: none;
+    background: #EEF4FF;
+    background: color-mix(in srgb, var(--ac) 12%, #fff); color: var(--ac);
+    font-family: Consolas, monospace; font-size: .66rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .tx { font-size: .76rem; color: var(--body); line-height: 1.6; text-align: left; }
+  .step .tx b { color: var(--ink); }
+
+  /* ============ 界面示意 ============ */
+  .mock {
+    width: 100%; border: .05rem solid var(--line); border-radius: .5rem; overflow: hidden;
+    background: #F7F9FC; text-align: left; box-shadow: 0 .6rem 1.6rem rgba(15,23,42,.08);
+  }
+  .mock .bar {
+    display: flex; align-items: center; gap: .35rem; padding: .4rem .6rem;
+    background: #fff; border-bottom: .05rem solid var(--line);
+  }
+  .mock .bar i { width: .42rem; height: .42rem; border-radius: 50%; display: block; }
+  .mock .bar .u {
+    flex: 1; margin-left: .5rem; font-family: Consolas, monospace; font-size: .58rem;
+    color: var(--muted); background: #F1F5F9; border-radius: 99rem; padding: .16rem .6rem;
+  }
+  .mock .body { display: grid; grid-template-columns: 1.15fr 1fr; gap: .55rem; padding: .6rem; }
+  .mock .panel { background: #fff; border: .05rem solid var(--line); border-radius: .35rem; padding: .5rem .55rem; }
+  .mock .ptitle { font-size: .58rem; letter-spacing: .08em; color: var(--muted); margin-bottom: .38rem; font-weight: 700; }
+  .bubble {
+    background: linear-gradient(135deg, #2563EB, #3B82F6); color: #fff;
+    font-size: .6rem; line-height: 1.5; border-radius: .3rem; padding: .34rem .5rem;
+    margin-bottom: .32rem; font-weight: 600;
+  }
+  .bubble.u2 { background: linear-gradient(135deg, #1D4ED8, #2563EB); }
+  .answer {
+    border: .05rem solid var(--line); border-left: .14rem solid #0D9488; border-radius: .3rem;
+    padding: .4rem .5rem; font-size: .58rem; line-height: 1.6; color: var(--body); background: #fff;
+  }
+  .logrow {
+    border-left: .14rem solid var(--c); background: #FBFCFD; border-radius: .2rem;
+    padding: .3rem .45rem; margin-bottom: .26rem; font-size: .56rem; color: var(--body); line-height: 1.55;
+  }
+  .logrow b { font-family: Consolas, monospace; color: var(--ink); font-size: .57rem; }
+  .logrow em { font-style: normal; color: #0D9488; font-weight: 800; }
+  .minibtn {
+    text-align: center; font-size: .58rem; color: #fff; font-weight: 800;
+    background: linear-gradient(135deg, #2563EB, #60A5FA); border-radius: .28rem; padding: .3rem;
+    margin-top: .3rem;
+  }
+
+  /* ============ 柱状图 ============ */
+  .chart { display: flex; align-items: flex-end; justify-content: center; gap: 1.5rem; height: 9.4rem; padding: .4rem 0 0; }
+  .bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 4.2rem; height: 100%; }
+  .bar .val { font-family: Consolas, monospace; font-size: .72rem; font-weight: 800; color: var(--ink); margin-bottom: .25rem; opacity: 0; }
+  .slide.active .bar .val { animation: rise .5s ease both; animation-delay: calc(.5s + var(--d, 0s)); }
+  .bar .col {
+    width: 2.1rem; height: 0; border-radius: .22rem .22rem 0 0;
+    background: var(--c);
+    background: linear-gradient(180deg, var(--c), color-mix(in srgb, var(--c) 55%, #fff));
+    transition: height 1s cubic-bezier(.22,.75,.28,1);
+    transition-delay: calc(.25s + var(--d, 0s));
+  }
+  .slide.active .bar .col { height: var(--h); }
+  .bar .lbl { font-size: .72rem; color: var(--muted); margin-top: .4rem; }
+
+  /* ============ 表格 ============ */
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: .46rem .55rem; font-size: .8rem; border-bottom: .05rem solid var(--line-soft); vertical-align: top; }
-  th {
-    font-size: .68rem; letter-spacing: .08em; color: var(--muted);
-    text-transform: uppercase; font-weight: 700; border-bottom: .08rem solid var(--line);
-  }
-  td code { background: none; padding: 0; font-size: .76rem; color: #1B4F7E; }
-  tr:last-child td { border-bottom: none; }
+  th, td { padding: .38rem .5rem; font-size: .76rem; text-align: left; border-bottom: .05rem solid var(--line); vertical-align: middle; }
+  th { font-size: .66rem; letter-spacing: .08em; color: var(--muted); font-weight: 800; text-transform: uppercase; }
+  td code { font-size: .72rem; }
   .num { font-family: Consolas, monospace; text-align: right; }
 
-  /* ---------- 代码块 ---------- */
-  .code {
-    background: var(--code-bg); border-radius: .3rem; padding: .85rem 1rem;
-    font-family: Consolas, monospace; font-size: .72rem; line-height: 1.72;
-    color: #CFDCE4; overflow: hidden;
-  }
-  .code .k { color: #8FC7E8; }
-  .code .s { color: #C3E88D; }
-  .code .c { color: #6C8899; }
-  .code .t { color: #E8C07D; }
-  .code-title {
-    font-size: .68rem; letter-spacing: .08em; color: var(--muted);
-    font-family: Consolas, monospace; margin-bottom: .34rem;
-  }
-
-  /* ---------- 架构图 ---------- */
-  .arch { display: flex; flex-direction: column; gap: .38rem; }
-  .layer {
-    border: .05rem solid var(--line); border-left: .22rem solid var(--accent);
-    background: #fff; border-radius: .18rem; padding: .55rem .85rem;
-    display: flex; align-items: center; gap: 1rem;
-  }
-  .layer .lno {
-    font-family: Consolas, monospace; font-size: .72rem; color: var(--accent);
-    font-weight: 700; flex: none; width: 1.5rem;
-  }
-  .layer .lname { font-size: .82rem; font-weight: 700; color: var(--ink); flex: none; width: 8.2rem; }
-  .layer .lbody { font-size: .76rem; color: var(--muted); line-height: 1.6; }
-  .layer .lbody code { font-size: .72rem; background: #F2F5F7; }
-  .layer.sub { border-left-color: var(--teal); }
-
-  .tools-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin-left: 3.4rem; }
-  .toolbox {
-    border: .05rem solid var(--line); border-radius: .18rem; padding: .5rem .6rem;
-    background: #fff;
-  }
-  .toolbox .tn { font-family: Consolas, monospace; font-size: .72rem; color: var(--teal); font-weight: 700; }
-  .toolbox .td2 { font-size: .72rem; color: var(--muted); margin-top: .16rem; line-height: 1.5; }
-  .flow-note {
-    font-family: Consolas, monospace; font-size: .68rem; color: var(--muted);
-    margin-left: 1.4rem; padding: .12rem 0;
-  }
-
-  /* ---------- 时序 ---------- */
-  .seq { display: flex; flex-direction: column; gap: 0; }
-  .seq .row {
-    display: grid; grid-template-columns: 1.8rem 10rem 1fr; gap: .9rem;
-    align-items: start; padding: .5rem 0; border-bottom: .05rem dashed var(--line);
-  }
-  .seq .row:last-child { border-bottom: none; }
-  .seq .idx { font-family: Consolas, monospace; font-size: .74rem; color: var(--accent); font-weight: 700; }
-  .seq .who { font-size: .78rem; font-weight: 700; color: var(--ink); }
-  .seq .what { font-size: .78rem; color: var(--body); line-height: 1.65; }
-  .seq .what code { font-size: .72rem; }
-
-  /* ---------- 功能点列表 ---------- */
-  .feat-list { display: flex; flex-direction: column; gap: .62rem; }
-  .feat-list .f {
-    display: grid; grid-template-columns: 1.2rem 1fr; gap: .7rem; align-items: start;
-  }
-  .feat-list .f .dot {
-    width: .42rem; height: .42rem; border-radius: 50%; background: var(--accent);
-    margin-top: .52rem;
-  }
-  .feat-list .f .ft { font-size: .82rem; font-weight: 700; color: var(--ink); }
-  .feat-list .f .fd { font-size: .78rem; color: var(--muted); line-height: 1.65; }
-
-  /* ---------- 截图框 ---------- */
-  .shot {
-    border: .06rem dashed #C3CDD6; border-radius: .2rem; background: #F4F6F8;
-    padding: .7rem; text-align: center; color: #93A1AD;
-    font-size: .74rem; line-height: 1.6;
-  }
-  .shot b { display: block; color: #7C8B98; font-size: .76rem; margin-bottom: .12rem; }
-
-  /* ---------- 双栏对照 ---------- */
-  .split-title {
-    font-size: .7rem; letter-spacing: .12em; color: var(--muted);
-    text-transform: uppercase; margin-bottom: .5rem; padding-bottom: .3rem;
-    border-bottom: .05rem solid var(--line);
-  }
-
+  /* ============ 其他 ============ */
   .note {
-    border-left: .18rem solid var(--accent); background: var(--accent-soft);
-    padding: .6rem .9rem; font-size: .82rem; color: #1B3B5C; line-height: 1.7;
+    border-radius: .4rem; padding: .6rem .9rem; font-size: .8rem; line-height: 1.7;
+    background: #F4F8FF;
+    background: color-mix(in srgb, var(--ac) 8%, #fff);
+    border-left: .18rem solid var(--ac); color: #1B3550; text-align: left;
   }
+  .arrowmid { display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: var(--ac); }
 
-  /* ---------- HUD ---------- */
-  .hud {
-    position: fixed; right: 1.3rem; bottom: 1rem; font-size: .74rem;
-    color: var(--muted); font-family: Consolas, monospace;
+  /* ============ 进度 / 导航 ============ */
+  .prog {
+    position: fixed; top: 0; left: 0; right: 0; height: .16rem; background: #DCE4EC; z-index: 20;
   }
-  .keys { position: fixed; left: 1.3rem; bottom: 1rem; font-size: .7rem; color: #9AA7B2; }
+  .prog i {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, #2563EB, #0D9488);
+    transition: width .35s ease;
+  }
+  .dots {
+    position: fixed; left: 50%; bottom: .85rem; transform: translateX(-50%);
+    display: flex; gap: .34rem; z-index: 20;
+  }
+  .dots span {
+    width: .34rem; height: .34rem; border-radius: 50%; background: #C6D0DA; cursor: pointer;
+    transition: all .25s ease;
+  }
+  .dots span.on { background: #2563EB; width: 1.1rem; border-radius: 99rem; }
+  .pageno {
+    position: fixed; right: 1.3rem; bottom: .8rem; font-family: Consolas, monospace;
+    font-size: .72rem; color: #8A98A6; z-index: 20;
+  }
+  .keys { position: fixed; left: 1.3rem; bottom: .8rem; font-size: .68rem; color: #97A4B1; z-index: 20; }
+  .cover ~ .dots span { background: #C6D0DA; }
 
   @media print {
     html, body { background: #fff; overflow: visible; }
     .deck { position: static; transform: none; }
     .slide { display: flex !important; position: relative; page-break-after: always; }
-    .hud, .keys { display: none; }
+    .prog, .dots, .pageno, .keys { display: none; }
+    .rv { opacity: 1 !important; animation: none !important; }
   }
 </style>
 </head>
 <body>
+<div class="prog"><i id="progBar"></i></div>
+
 <div class="deck" id="deck">
 
-  <!-- 01 封面 -->
+  <!-- ================= 01 封面 ================= -->
   <section class="slide cover active">
-    <div class="tagline">课程期末汇报 · 路径 B</div>
-    <h1>校园志愿时长汇总助手</h1>
-    <div class="desc">
-      基于 Streamlit 与通义千问 Tool Calling 的志愿时长查询、统计与导出工具。<br>
-      用户以自然语言提出需求，模型调用本地工具完成数据处理并生成 Excel 汇总表。
+    <div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+    <div class="inner">
+      <div class="tag rv" style="--d:.05s">开源AI技术实践 · 期末汇报 · 路径 B</div>
+      <h1 class="rv" style="--d:.18s">校园志愿时长汇总助手</h1>
+      <div class="sub rv" style="--d:.32s">
+        Streamlit × 通义千问 Tool Calling<br>
+        用一句话完成「查询 · 统计 · 导出报表」
+      </div>
+      <div class="chips rv" style="--d:.46s">
+        <span class="chip">3 个业务工具</span>
+        <span class="chip">真实 Function Calling</span>
+        <span class="chip">网页内导出 Excel</span>
+        <span class="chip">工具调用可视化</span>
+      </div>
+      <div class="metaline rv" style="--d:.6s">
+        <div><span>姓名 / 学号</span>张三 2023001 · 李四 2023002</div>
+        <div><span>课程</span>《开源AI技术实践》</div>
+        <div><span>仓库</span>github.com/ZWQ-Tech/volunteer-hours-assistant</div>
+      </div>
     </div>
-    <div class="divider"></div>
-    <div class="meta">
-      <div><span>姓名 / 学号</span>张三 2023001<br>李四 2023002</div>
-      <div><span>课程</span>《开源AI技术实践》</div>
-      <div><span>技术栈</span>Streamlit · qwen-plus · pandas</div>
-      <div><span>代码仓库</span>github.com/ZWQ-Tech/volunteer-hours-assistant</div>
-    </div>
-    <div class="footline"><span>2026.10</span><span>01 / 12</span></div>
+    <div class="scrollhint rv" style="--d:.8s">按 → 或 空格 开始</div>
   </section>
 
-  <!-- 02 背景与痛点 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">02 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">01 &nbsp;背景</div>
-      <h2>志愿时长统计，卡在“数据散、口径乱、报表重”</h2>
-      <div class="rule"></div>
+  <!-- ================= 02 背景 ================= -->
+  <section class="slide" style="--ac:#2563EB">
+    <div class="hd">
+      <div class="kicker">01 · 背景</div>
+      <h2>志愿时长统计，卡在<em>数据散、口径乱、报表重</em></h2>
+      <div class="dek">每学期末，负责人要在多张班级表里手工筛选、逐人相加，再重做一份汇总表</div>
     </div>
 
-    <div class="g5-7" style="flex:1">
-      <div class="stack">
-        <div>
-          <div class="split-title">现状问题</div>
-          <ul>
-            <li>记录分散在各班 Excel，字段命名不统一</li>
-            <li>期末核算需人工筛选、逐人相加，易漏算</li>
-            <li>每次汇总都要重做一份表，报表格式反复返工</li>
-            <li>负责人不熟悉公式，操作门槛高</li>
-          </ul>
-        </div>
-        <div>
-          <div class="split-title">需求提炼</div>
-          <p class="small">
-            把“按时间段筛选 → 按人汇总 → 出报表”这条固定链路做成一句话可完成的操作，
-            同时保留可核对的原始明细。
-          </p>
-        </div>
+    <div class="wrap">
+      <div class="kpis rv" style="--d:.05s">
+        <div class="kpi"><div class="v" data-count="10">0<i>条</i></div><div class="k">一个学期的志愿记录</div></div>
+        <div class="kpi"><div class="v" data-count="4">0<i>人</i></div><div class="k">参与志愿者</div></div>
+        <div class="kpi"><div class="v" data-count="6">0<i>个</i></div><div class="k">志愿项目</div></div>
+        <div class="kpi"><div class="v" data-count="39.0">0<i>h</i></div><div class="k">累计时长</div></div>
       </div>
 
-      <div class="stack">
-        <div class="split-title">以一个学期为例（模拟数据）</div>
-        <div class="metrics">
-          <div class="metric"><div class="n">10<em>条</em></div><div class="l">志愿记录</div></div>
-          <div class="metric"><div class="n">4<em>人</em></div><div class="l">参与志愿者</div></div>
-          <div class="metric"><div class="n">6<em>个</em></div><div class="l">志愿项目</div></div>
-          <div class="metric"><div class="n">39.0<em>h</em></div><div class="l">累计时长</div></div>
+      <div class="cards2 rv" style="--d:.2s; margin-top:1.15rem">
+        <div class="card top" style="--c:#E11D48">
+          <div class="badge" style="--c:#E11D48">手工流程</div>
+          <div class="ct">5 步操作，容易出错</div>
+          <div class="cd">
+            ① 收集各班表 → ② 统一字段 → ③ 按日期筛 → ④ 逐人累加 → ⑤ 重做汇总表<br>
+            任一步改数据，后面全部重来
+          </div>
         </div>
-        <table style="margin-top:.4rem">
-          <tr><th>姓名</th><th>项目</th><th>日期</th><th class="num">时长(h)</th></tr>
-          <tr><td>张三</td><td>图书馆图书整理</td><td class="mono">2026-09-12</td><td class="num">3.0</td></tr>
-          <tr><td>李四</td><td>社区敬老院慰问</td><td class="mono">2026-10-01</td><td class="num">6.0</td></tr>
-          <tr><td>王五</td><td>校园运动会保障</td><td class="mono">2026-10-15</td><td class="num">3.5</td></tr>
-          <tr><td>赵六</td><td>图书馆图书整理</td><td class="mono">2026-10-08</td><td class="num">3.0</td></tr>
-        </table>
-        <div class="small">表中仅展示 4 行示例，系统内为 10 条完整记录。</div>
+        <div class="card top" style="--c:#0D9488">
+          <div class="badge" style="--c:#0D9488">本项目的目标</div>
+          <div class="ct">1 句话，结果可核对</div>
+          <div class="cd">
+            说清时间范围与要什么，剩下的交给工具执行；<br>
+            每个数字都能回溯到原始记录，报表可直接归档
+          </div>
+        </div>
       </div>
     </div>
-    <div class="footline"><span>数据为课程自建模拟数据</span><span>02 / 12</span></div>
+    <div class="pageno"><span class="pn">02</span> / 12</div>
   </section>
 
-  <!-- 03 方案 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">03 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">02 &nbsp;方案</div>
-      <h2>用 Agent 承载一条固定业务链路</h2>
-      <div class="dek">
-        模型只做两件事：理解用户要什么、决定按什么顺序调用哪个工具。所有计算与文件生成在本地完成，
-        结果可由原始记录核对。
-      </div>
-      <div class="rule"></div>
+  <!-- ================= 03 方案 ================= -->
+  <section class="slide" style="--ac:#7C3AED">
+    <div class="hd">
+      <div class="kicker">02 · 方案</div>
+      <h2>把一条固定业务链路<em>交给 Agent</em>执行</h2>
+      <div class="dek">模型只做两件事：理解要什么、决定按什么顺序调用哪个工具；计算与出表全部在本地完成</div>
     </div>
 
-    <div class="g3" style="flex:1; align-items:start">
-      <div>
-        <div class="split-title">能力一 · 条件查询</div>
-        <p class="small">
-          按起止日期检索志愿记录，支持用项目名称进一步筛选。
-          返回结构化记录，而非自然语言描述。
-        </p>
-        <div class="code" style="margin-top:.6rem; font-size:.7rem">
-<span class="c">// 用户</span>
-查询 10 月的志愿记录
-
-<span class="c">// 模型决策</span>
-query_volunteer_data(
-  <span class="s">"2026-10-01"</span>,
-  <span class="s">"2026-10-31"</span>)
+    <div class="wrap">
+      <div class="cards3">
+        <div class="tool rv" style="--c:#2563EB; --d:.05s">
+          <div class="ic">01</div>
+          <div class="nm">条件查询</div>
+          <div class="pr">按起止日期检索<br>可用<b>项目名</b>进一步筛选</div>
+          <div class="rt">返回结构化记录数组，不是一段自然语言描述</div>
+        </div>
+        <div class="tool rv" style="--c:#0D9488; --d:.15s">
+          <div class="ic">02</div>
+          <div class="nm">分组统计</div>
+          <div class="pr">按姓名分组累加时长<br>统计<b>参与次数</b>并降序</div>
+          <div class="rt">输出 4 人排名，合计 39.0 小时</div>
+        </div>
+        <div class="tool rv" style="--c:#D97706; --d:.25s">
+          <div class="ic">03</div>
+          <div class="nm">导出报表</div>
+          <div class="pr">写 xlsx 并挂到页面<br><b>点击即下载</b>，带时间戳</div>
+          <div class="rt">文件名 志愿时长汇总_日期_时分.xlsx</div>
         </div>
       </div>
 
-      <div>
-        <div class="split-title">能力二 · 分组统计</div>
-        <p class="small">
-          对查询结果按姓名分组，累加时长并统计参与次数，
-          输出降序排名，用于横向对比。
-        </p>
-        <div class="code" style="margin-top:.6rem; font-size:.7rem">
-<span class="c">// 工具内部处理</span>
-df.groupby(<span class="s">"姓名"</span>)[<span class="s">"时长"</span>].sum()
-  .sort_values(ascending=False)
-
-<span class="c">// 输出</span>
-张三 12.5h / 3 次
-王五  9.5h / 3 次
-        </div>
-      </div>
-
-      <div>
-        <div class="split-title">能力三 · 导出报表</div>
-        <p class="small">
-          将统计结果写入 xlsx 并挂到页面下载区，
-          文件名带时间戳，避免覆盖历史报表。
-        </p>
-        <div class="code" style="margin-top:.6rem; font-size:.7rem">
-<span class="c">// 生成文件</span>
-志愿时长汇总_20261026_215814.xlsx
-  工作表：志愿时长汇总
-  列：姓名 / 总时长 / 参与次数
-
-<span class="c">// 页面即时出现下载按钮</span>
-        </div>
+      <div class="note rv" style="--d:.4s; margin-top:1.15rem">
+        <b>范围界定：</b>面向校团委与院系志愿负责人，单机运行，数据为课程自建模拟数据
       </div>
     </div>
-    <div class="footline"><span>范围界定：面向校团委与院系志愿负责人，单机运行</span><span>03 / 12</span></div>
+    <div class="pageno"><span class="pn">03</span> / 12</div>
   </section>
 
-  <!-- 04 总体架构 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">04 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">03 &nbsp;架构</div>
-      <h2>五层结构：界面、会话、模型、工具、数据</h2>
-      <div class="rule"></div>
+  <!-- ================= 04 架构 ================= -->
+  <section class="slide" style="--ac:#0D9488">
+    <div class="hd">
+      <div class="kicker">03 · 架构</div>
+      <h2>五层结构：<em>模型决策，代码执行</em></h2>
+      <div class="dek">模型不接触原始数据，只传参数；所有计算与文件生成在本地完成</div>
     </div>
 
-    <div class="arch" style="flex:1">
-      <div class="layer">
-        <span class="lno">A</span><span class="lname">交互层</span>
-        <span class="lbody">Streamlit 页面：对话区、工具日志、结果表格、柱状图、下载按钮　<span class="mono">app.py · render_*</span></span>
-      </div>
-      <div class="flow-note">↓ 用户输入文本</div>
-
-      <div class="layer">
-        <span class="lno">B</span><span class="lname">Agent 会话层</span>
-        <span class="lbody">
-          维护 <code>messages</code> 与 <code>st.session_state</code>，装配 <code>tools</code> 协议，驱动工具调用循环（上限 6 轮）
-        </span>
-      </div>
-      <div class="flow-note">↓ chat.completions.create(model, messages, tools)</div>
-
-      <div class="layer sub">
-        <span class="lno">C</span><span class="lname">模型层</span>
-        <span class="lbody">通义千问 <code>qwen-plus</code>（DashScope OpenAI 兼容接口）：意图理解、工具选择、参数生成、结果转述</span>
-      </div>
-      <div class="flow-note">↓ 返回 tool_calls（工具名 + JSON 参数）</div>
-
-      <div class="layer">
-        <span class="lno">D</span><span class="lname">工具层</span>
-        <span class="lbody">三个本地函数，执行后以 JSON 回填给模型，形成下一轮上下文</span>
-      </div>
-      <div class="tools-row">
-        <div class="toolbox">
-          <div class="tn">query_volunteer_data</div>
-          <div class="td2">按日期区间与项目名筛选，返回记录数组</div>
+    <div class="wrap" style="display:flex; justify-content:center">
+      <div class="arch">
+        <div class="layer rv" style="--c:#2563EB; --d:.02s">
+          <span class="ln">A</span><span class="nm">交互层</span>
+          <span class="ds">Streamlit 页面：对话区 · 工具日志 · 结果表格 · 柱状图 · 下载按钮</span>
         </div>
-        <div class="toolbox">
-          <div class="tn">calc_total_hours</div>
-          <div class="td2">按姓名分组累加时长，输出排名与次数</div>
-        </div>
-        <div class="toolbox">
-          <div class="tn">export_volunteer_excel</div>
-          <div class="td2">生成 xlsx 并挂载到页面下载区</div>
-        </div>
-      </div>
-      <div class="flow-note">↓ pandas 读写 · openpyxl 落盘</div>
+        <div class="vstep rv" style="--d:.08s">用户输入文本，提交到 st.chat_input</div>
 
-      <div class="layer">
-        <span class="lno">E</span><span class="lname">数据层</span>
-        <span class="lbody">内存数据表 <code>st.session_state.volunteer_df</code>（10 条模拟记录）+ 最近查询/统计结果缓存</span>
+        <div class="layer rv" style="--c:#7C3AED; --d:.14s">
+          <span class="ln">B</span><span class="nm">会话层</span>
+          <span class="ds">维护 <code>messages</code> 与 <code>st.session_state</code>，装配 <code>tools</code> 协议，驱动调用循环（上限 6 轮）</span>
+        </div>
+        <div class="vstep rv" style="--d:.2s">chat.completions.create(model, messages, tools)</div>
+
+        <div class="layer rv" style="--c:#2563EB; --d:.26s">
+          <span class="ln">C</span><span class="nm">模型层</span>
+          <span class="ds">通义千问 <code>qwen-plus</code>（DashScope OpenAI 兼容接口）：意图理解 · 工具选择 · 参数生成</span>
+        </div>
+        <div class="vstep rv" style="--d:.32s">返回 tool_calls（工具名 + JSON 参数）</div>
+
+        <div class="layer rv" style="--c:#D97706; --d:.38s">
+          <span class="ln">D</span><span class="nm">工具层</span>
+          <span class="ds">三个本地函数：查询 / 统计 / 导出，执行后以 JSON 回填，形成下一轮上下文</span>
+        </div>
+        <div class="vstep rv" style="--d:.44s">pandas 筛选与分组 · openpyxl 写出文件</div>
+
+        <div class="layer rv" style="--c:#0D9488; --d:.5s">
+          <span class="ln">E</span><span class="nm">数据层</span>
+          <span class="ds">内存数据表 <code>st.session_state.volunteer_df</code>（10 条记录）+ 最近结果缓存</span>
+        </div>
       </div>
     </div>
-    <div class="footline"><span>关键约束：模型不接触原始数据，只传参数；数据计算全部在本地</span><span>04 / 12</span></div>
+    <div class="pageno"><span class="pn">04</span> / 12</div>
   </section>
 
-  <!-- 05 时序 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">05 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">04 &nbsp;运行机制</div>
-      <h2>一次“统计并导出”请求的完整时序</h2>
-      <div class="dek">三次工具调用由模型自主串联，页面在每一步写入日志，可逐条核对。</div>
-      <div class="rule"></div>
+  <!-- ================= 05 时序 ================= -->
+  <section class="slide" style="--ac:#D97706">
+    <div class="hd">
+      <div class="kicker">04 · 运行机制</div>
+      <h2>一句话触发<em>三次工具调用</em></h2>
+      <div class="dek">从用户输入到生成结论，共 9 个环节；页面在每一步写入日志，可逐条核对</div>
     </div>
 
-    <div class="seq" style="flex:1">
-      <div class="row"><div class="idx">01</div><div class="who">用户 → 界面</div>
-        <div class="what">输入“统计 9 月以来每人总时长并导出 Excel”，提交到 <code>st.chat_input</code></div></div>
-      <div class="row"><div class="idx">02</div><div class="who">Agent → 模型</div>
-        <div class="what">拼装 <code>system + 历史消息 + tools 定义</code>，发起第一次请求</div></div>
-      <div class="row"><div class="idx">03</div><div class="who">模型 → Agent</div>
-        <div class="what">返回 <code>finish_reason=tool_calls</code>，指定 <code>query_volunteer_data</code> 与日期参数</div></div>
-      <div class="row"><div class="idx">04</div><div class="who">Agent → 工具</div>
-        <div class="what">执行查询：过滤 10 条记录中的目标区间，返回 <code>{"status":"success","count":10}</code></div></div>
-      <div class="row"><div class="idx">05</div><div class="who">Agent → 模型</div>
-        <div class="what">以 <code>role=tool</code> 回填结果，模型发起第二次调用 <code>calc_total_hours</code></div></div>
-      <div class="row"><div class="idx">06</div><div class="who">工具内部</div>
-        <div class="what">按姓名分组累加：张三 12.5 / 王五 9.5 / 李四 8.5 / 赵六 8.5，合计 39.0 小时</div></div>
-      <div class="row"><div class="idx">07</div><div class="who">Agent → 模型</div>
-        <div class="what">再次回填统计结果，模型发起第三次调用 <code>export_volunteer_excel</code></div></div>
-      <div class="row"><div class="idx">08</div><div class="who">工具 → 页面</div>
-        <div class="what">openpyxl 写出 xlsx 字节流，写入会话状态，页面下载区立即出现按钮</div></div>
-      <div class="row"><div class="idx">09</div><div class="who">模型 → 用户</div>
-        <div class="what">生成中文结论并结束本轮，日志区保留三次调用的入参与结果</div></div>
+    <div class="wrap">
+      <div class="steps">
+        <div class="step rv" style="--d:.02s"><div class="n">01</div><div class="tx"><b>用户提交</b>需求，进入 <code>st.chat_input</code></div></div>
+        <div class="step rv" style="--d:.2s"><div class="n">06</div><div class="tx"><b>统计工具</b>分组累加：12.5 / 9.5 / 8.5 / 8.5</div></div>
+        <div class="step rv" style="--d:.06s"><div class="n">02</div><div class="tx"><b>拼装上下文</b>：system + 历史消息 + tools</div></div>
+        <div class="step rv" style="--d:.24s"><div class="n">07</div><div class="tx"><b>再次回填</b>结果，模型发起导出调用</div></div>
+        <div class="step rv" style="--d:.1s"><div class="n">03</div><div class="tx"><b>模型返回</b><code>tool_calls</code>，指定查询工具与日期</div></div>
+        <div class="step rv" style="--d:.28s"><div class="n">08</div><div class="tx"><b>写出 xlsx</b>，下载区立即出现按钮</div></div>
+        <div class="step rv" style="--d:.14s"><div class="n">04</div><div class="tx"><b>执行查询</b>，返回 <code>{"status":"success","count":10}</code></div></div>
+        <div class="step rv" style="--d:.32s"><div class="n">09</div><div class="tx"><b>模型生成</b>中文结论，本轮结束</div></div>
+        <div class="step rv" style="--d:.18s"><div class="n">05</div><div class="tx"><b>回填结果</b>（role=tool），模型发起统计调用</div></div>
+        <div class="step rv" style="--d:.36s"><div class="n">↺</div><div class="tx">限流或超时时<b>自动退避重试</b>，失败可一键重发</div></div>
+      </div>
+
+      <div class="note rv" style="--d:.48s; margin-top:1rem">
+        全流程约 3 次模型请求。日志区保留每次调用的工具名、入参、状态与结果摘要。
+      </div>
     </div>
-    <div class="footline"><span>全流程约 3 次模型请求，限流时自动退避重试</span><span>05 / 12</span></div>
+    <div class="pageno"><span class="pn">05</span> / 12</div>
   </section>
 
-  <!-- 06 工具设计 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">06 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">05 &nbsp;工具设计</div>
-      <h2>三个工具的入参与返回</h2>
-      <div class="rule"></div>
+  <!-- ================= 06 工具设计 ================= -->
+  <section class="slide" style="--ac:#2563EB">
+    <div class="hd">
+      <div class="kicker">05 · 工具设计</div>
+      <h2>三个工具的<em>入参、返回与取舍</em></h2>
+      <div class="dek">工具均为项目内自行实现，参数结构直接决定模型能否稳定调用</div>
     </div>
 
-    <div style="flex:1">
-      <table>
-        <tr>
-          <th style="width:22%">工具</th><th style="width:32%">入参</th><th>返回</th>
-        </tr>
-        <tr>
-          <td><code>query_volunteer_data</code></td>
-          <td>
-            <code>start_date</code> 必填<br>
-            <code>end_date</code> 必填<br>
-            <code>project_name</code> 可选
-          </td>
-          <td><code>{ status, count, message, records[] }</code><br>
-            <span class="small">status 取值 success / empty / error</span></td>
-        </tr>
-        <tr>
-          <td><code>calc_total_hours</code></td>
-          <td><code>records</code> 可选<br>
-            <span class="small">省略时取最近一次查询结果</span></td>
-          <td><code>{ status, summary[{姓名, 总时长, 参与次数}], 总计 }</code></td>
-        </tr>
-        <tr>
-          <td><code>export_volunteer_excel</code></td>
-          <td><code>summary</code> 可选<br>
-            <span class="small">省略时取最近一次统计结果</span></td>
-          <td><code>{ status, filename, message }</code></td>
-        </tr>
-      </table>
+    <div class="wrap">
+      <div class="cards3">
+        <div class="tool rv" style="--c:#2563EB; --d:.02s">
+          <div class="ic">Q</div>
+          <div class="nm">query_volunteer_data</div>
+          <div class="pr">
+            <b>start_date</b> 必填<br>
+            <b>end_date</b> 必填<br>
+            <b>project_name</b> 可选
+          </div>
+          <div class="rt">{ status, count, message, records[] }<br>status: success / empty / error</div>
+        </div>
+        <div class="tool rv" style="--c:#0D9488; --d:.12s">
+          <div class="ic">Σ</div>
+          <div class="nm">calc_total_hours</div>
+          <div class="pr">
+            <b>records</b> 可选<br>
+            <span class="small">省略时取最近一次查询结果</span>
+          </div>
+          <div class="rt">{ status, summary[{姓名, 总时长, 参与次数}], 总计 }</div>
+        </div>
+        <div class="tool rv" style="--c:#D97706; --d:.22s">
+          <div class="ic">↓</div>
+          <div class="nm">export_volunteer_excel</div>
+          <div class="pr">
+            <b>summary</b> 可选<br>
+            <span class="small">省略时取最近一次统计结果</span>
+          </div>
+          <div class="rt">{ status, filename, message }</div>
+        </div>
+      </div>
 
-      <div class="g2" style="margin-top:1.05rem">
-        <div>
-          <div class="code-title">Schema 片段（交给模型的定义）</div>
-          <div class="code" style="font-size:.68rem; line-height:1.66">
+      <div class="cards2 rv" style="--d:.36s; margin-top:1rem; align-items:start">
+        <div class="code">
+<span class="c"># 交给模型的工具定义（节选）</span>
 <span class="k">"function"</span>: {
   <span class="k">"name"</span>: <span class="s">"query_volunteer_data"</span>,
   <span class="k">"parameters"</span>: {
-    <span class="k">"type"</span>: <span class="s">"object"</span>,
     <span class="k">"properties"</span>: {
       <span class="k">"start_date"</span>: {<span class="k">"type"</span>: <span class="s">"string"</span>},
       <span class="k">"end_date"</span>:   {<span class="k">"type"</span>: <span class="s">"string"</span>},
@@ -494,329 +580,324 @@ df.groupby(<span class="s">"姓名"</span>)[<span class="s">"时长"</span>].sum
     <span class="k">"required"</span>: [<span class="s">"start_date"</span>, <span class="s">"end_date"</span>]
   }
 }
-          </div>
         </div>
         <div>
-          <div class="split-title">三点设计取舍</div>
-          <ul style="font-size:.8rem">
-            <li><b>可选参数</b>：让用户可以不提项目名，模型也能自行补默认行为</li>
-            <li><b>数据不回传</b>：统计与导出省略数组参数，避免长 JSON 被截断导致 400 错误</li>
-            <li><b>状态三值</b>：<code>success / empty / error</code> 让模型分别给出结果、提示或修正建议</li>
-          </ul>
-          <div class="note" style="margin-top:.7rem; font-size:.78rem">
-            参数由模型生成，但工具内部再做一次日期与类型校验，不信任外部输入。
+          <div class="card top" style="--c:#0D9488; margin-bottom:.55rem">
+            <div class="ct">取舍一 · 可选参数</div>
+            <div class="cd">用户不必说全条件，模型可采用默认行为</div>
+          </div>
+          <div class="card top" style="--c:#7C3AED; margin-bottom:.55rem">
+            <div class="ct">取舍二 · 数据不回传</div>
+            <div class="cd">统计与导出省略数组参数，避免长 JSON 被截断导致 400</div>
+          </div>
+          <div class="card top" style="--c:#D97706">
+            <div class="ct">取舍三 · 状态三值</div>
+            <div class="cd">success / empty / error 让模型分别给出结果、提示或修正建议</div>
           </div>
         </div>
       </div>
     </div>
-    <div class="footline"><span>工具均为项目内自行实现，非课堂 demo 自带</span><span>06 / 12</span></div>
+    <div class="pageno"><span class="pn">06</span> / 12</div>
   </section>
 
-  <!-- 07 功能演示 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">07 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">06 &nbsp;功能演示</div>
-      <h2>同一句话，依次得到明细、统计、报表</h2>
-      <div class="dek">右侧为实际运行时的工具调用记录，可在页面日志区逐条核对。</div>
-      <div class="rule"></div>
+  <!-- ================= 07 界面示意 ================= -->
+  <section class="slide" style="--ac:#7C3AED">
+    <div class="hd">
+      <div class="kicker">06 · 功能演示</div>
+      <h2>三块区域：<em>提问记录 · 工具日志 · 结果输出</em></h2>
+      <div class="dek">下图按实际页面结构绘制：左上提问、右上工具调用、右下结果与下载</div>
     </div>
 
-    <div class="g7-5" style="flex:1">
-      <div class="stack">
-        <div class="shot" style="padding:1.1rem">
-          <b>图 1　主界面</b>
-          左侧对话与提问记录，右侧工具日志、结果明细、柱状图与下载区
+    <div class="wrap">
+      <div class="mock rv" style="--d:.05s">
+        <div class="bar">
+          <i style="background:#F87171"></i><i style="background:#FBBF24"></i><i style="background:#34D399"></i>
+          <span class="u">localhost:8501 · 校园志愿时长汇总助手</span>
         </div>
-        <div class="shot" style="padding:1.1rem">
-          <b>图 2　一次链式调用的日志区</b>
-          三次调用依次高亮，含工具名、入参、状态与结果摘要
-        </div>
-      </div>
-
-      <div class="stack">
-        <div>
-          <div class="split-title">工具调用记录</div>
-          <div class="code" style="font-size:.7rem; line-height:1.9">
-<span class="c">21:58:12</span> <span class="t">query_volunteer_data</span>   <span class="s">success</span>
-  入参 start=2026-09-01 end=2026-10-31
-  结果 共查询到 10 条志愿记录
-
-<span class="c">21:58:13</span> <span class="t">calc_total_hours</span>       <span class="s">success</span>
-  入参 (省略 records，取上次查询结果)
-  结果 已统计 4 位同学，总计 39.0 小时
-
-<span class="c">21:58:14</span> <span class="t">export_volunteer_excel</span> <span class="s">success</span>
-  结果 志愿时长汇总_20261026_215814.xlsx
+        <div class="body">
+          <div class="panel">
+            <div class="ptitle">智能对话</div>
+            <div class="bubble">帮我查询 2026-10-01 到 2026-10-31 的志愿记录</div>
+            <div class="answer">
+              <b style="color:#0D9488">回答 1</b><br>
+              共查到 6 条记录：张三 4.5h、李四 6.0h、王五 5.5h、赵六 8.5h。需要统计每人的总时长吗？
+            </div>
+            <div class="bubble u2">统计 9 月以来每个人的总时长，并导出 Excel</div>
+            <div class="answer">
+              <b style="color:#0D9488">回答 2</b><br>
+              已统计 4 人，合计 39.0 小时，Excel 汇总表已生成，可在右侧下载。
+            </div>
+          </div>
+          <div class="panel">
+            <div class="ptitle">工具调用日志 · 最新在前</div>
+            <div class="logrow" style="--c:#22C55E">
+              <b>query_volunteer_data</b> <em>成功</em><br>
+              入参 2026-09-01 ~ 2026-10-31<br>结果 共 10 条记录
+            </div>
+            <div class="logrow" style="--c:#22C55E">
+              <b>calc_total_hours</b> <em>成功</em><br>
+              入参 （省略 records）<br>结果 4 人 · 39.0 小时
+            </div>
+            <div class="logrow" style="--c:#22C55E">
+              <b>export_volunteer_excel</b> <em>成功</em><br>
+              结果 志愿时长汇总_215814.xlsx
+            </div>
+            <div class="minibtn">⬇ 下载 志愿时长汇总.xlsx</div>
           </div>
         </div>
-        <div>
-          <div class="split-title">统计输出</div>
+      </div>
+      <div class="small rv" style="--d:.2s; text-align:center; margin-top:.55rem">
+        图示为界面结构与真实内容；答辩时可直接切到程序演示同一流程
+      </div>
+    </div>
+    <div class="pageno"><span class="pn">07</span> / 12</div>
+  </section>
+
+  <!-- ================= 08 结果可视化 ================= -->
+  <section class="slide" style="--ac:#0D9488">
+    <div class="hd">
+      <div class="kicker">07 · 结果</div>
+      <h2>统计结果<em>自动成图</em>，一眼看出差距</h2>
+      <div class="dek">统计成功后页面自动绘制柱状图，并与明细表、导出文件保持一致</div>
+    </div>
+
+    <div class="wrap">
+      <div class="cards2" style="align-items:stretch">
+        <div class="card rv" style="--d:.05s; padding:.8rem 1rem">
+          <div class="chart">
+            <div class="bar" style="--c:#2563EB; --d:.0s">
+              <div class="val">12.5</div><div class="col" style="--h:8.6rem"></div><div class="lbl">张三</div>
+            </div>
+            <div class="bar" style="--c:#0D9488; --d:.12s">
+              <div class="val">9.5</div><div class="col" style="--h:6.6rem"></div><div class="lbl">王五</div>
+            </div>
+            <div class="bar" style="--c:#D97706; --d:.24s">
+              <div class="val">8.5</div><div class="col" style="--h:5.9rem"></div><div class="lbl">李四</div>
+            </div>
+            <div class="bar" style="--c:#7C3AED; --d:.36s">
+              <div class="val">8.5</div><div class="col" style="--h:5.9rem"></div><div class="lbl">赵六</div>
+            </div>
+          </div>
+          <div class="small" style="text-align:center; margin-top:.4rem">个人累计志愿时长（小时）· 2026-09-01 ~ 2026-10-31</div>
+        </div>
+
+        <div class="card rv" style="--d:.18s; padding:.75rem 1rem">
           <table>
-            <tr><th>姓名</th><th class="num">总时长</th><th class="num">次数</th></tr>
-            <tr><td>张三</td><td class="num">12.5</td><td class="num">3</td></tr>
-            <tr><td>王五</td><td class="num">9.5</td><td class="num">3</td></tr>
-            <tr><td>李四</td><td class="num">8.5</td><td class="num">2</td></tr>
-            <tr><td>赵六</td><td class="num">8.5</td><td class="num">2</td></tr>
-            <tr><td><b>合计</b></td><td class="num"><b>39.0</b></td><td class="num"><b>10</b></td></tr>
+            <tr><th>姓名</th><th class="num">总时长</th><th class="num">次数</th><th class="num">占比</th></tr>
+            <tr><td>张三</td><td class="num">12.5</td><td class="num">3</td><td class="num">32.1%</td></tr>
+            <tr><td>王五</td><td class="num">9.5</td><td class="num">3</td><td class="num">24.4%</td></tr>
+            <tr><td>李四</td><td class="num">8.5</td><td class="num">2</td><td class="num">21.8%</td></tr>
+            <tr><td>赵六</td><td class="num">8.5</td><td class="num">2</td><td class="num">21.8%</td></tr>
+            <tr><td><b>合计</b></td><td class="num"><b>39.0</b></td><td class="num"><b>10</b></td><td class="num"><b>100%</b></td></tr>
           </table>
-        </div>
-      </div>
-    </div>
-    <div class="footline"><span>演示时长约 4 分钟</span><span>07 / 12</span></div>
-  </section>
-
-  <!-- 08 技术栈 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">08 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">07 &nbsp;所用工具</div>
-      <h2>技术栈与选型理由</h2>
-      <div class="rule"></div>
-    </div>
-
-    <div style="flex:1">
-      <table>
-        <tr><th style="width:26%">组件</th><th style="width:16%">版本</th><th style="width:28%">承担的工作</th><th>选型理由</th></tr>
-        <tr><td>Python</td><td class="mono">3.13</td><td>运行环境</td><td>课程统一环境，数据处理生态完整</td></tr>
-        <tr><td>Streamlit</td><td class="mono">≥ 1.36</td><td>页面与交互、会话状态</td><td>纯 Python 即可产出可用界面，适合演示</td></tr>
-        <tr><td>openai SDK</td><td class="mono">≥ 1.40</td><td>调用 DashScope 兼容接口</td><td>OpenAI 协议通用，便于替换模型</td></tr>
-        <tr><td>通义千问 qwen-plus</td><td class="mono">—</td><td>意图理解、工具选择、参数生成</td><td>中文理解稳定，支持 Function Calling</td></tr>
-        <tr><td>pandas</td><td class="mono">≥ 2.0</td><td>过滤、分组、汇总</td><td>几行代码完成统计，结果可复核</td></tr>
-        <tr><td>plotly</td><td class="mono">≥ 5.20</td><td>柱状图</td><td>交互式图表，可直接嵌入页面</td></tr>
-        <tr><td>openpyxl</td><td class="mono">≥ 3.1</td><td>生成 xlsx</td><td>输出可直接用于台账归档</td></tr>
-        <tr><td>python-dotenv</td><td class="mono">≥ 1.0</td><td>密钥加载</td><td>密钥与代码分离，配合 gitignore</td></tr>
-        <tr><td>Streamlit AppTest</td><td class="mono">内置</td><td>端到端回归测试</td><td>无浏览器即可验证工具链是否跑通</td></tr>
-        <tr><td>Git / GitHub</td><td class="mono">—</td><td>版本管理、提交仓库</td><td>过程可追溯，便于课程提交</td></tr>
-      </table>
-
-      <div class="g2" style="margin-top:.9rem">
-        <div>
-          <div class="split-title">运行方式</div>
-          <div class="code" style="font-size:.7rem">
-<span class="c"># 安装依赖</span>
-pip install -r requirements.txt
-
-<span class="c"># 配置密钥（模板见 .env.example）</span>
-copy .env.example .env
-
-<span class="c"># 启动</span>
-streamlit run app.py
+          <div class="note" style="margin-top:.6rem; font-size:.76rem">
+            导出的 Excel 与此表逐行一致，可用于台账核对与归档
           </div>
         </div>
-        <div>
-          <div class="split-title">工程约定</div>
-          <ul style="font-size:.8rem">
-            <li>密钥仅存 <code>.env</code>，已被 <code>.gitignore</code> 排除</li>
-            <li>运行日志写入 <code>logs/app.log</code>，便于排查调用失败</li>
-            <li>页面提供“接口自检”，可单独验证模型连通性</li>
-          </ul>
-        </div>
       </div>
     </div>
-    <div class="footline"><span>全部依赖可通过 requirements.txt 复现</span><span>08 / 12</span></div>
+    <div class="pageno"><span class="pn">08</span> / 12</div>
   </section>
 
-  <!-- 09 与课堂实验的关系 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">09 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">08 &nbsp;与课堂实验的关系</div>
-      <h2>复用了什么，自己写了什么</h2>
-      <div class="rule"></div>
+  <!-- ================= 09 技术栈 ================= -->
+  <section class="slide" style="--ac:#E11D48">
+    <div class="hd">
+      <div class="kicker">08 · 所用工具</div>
+      <h2>技术栈：<em>9 个组件</em>各司其职</h2>
+      <div class="dek">从运行环境到测试与交付，依赖清单在 requirements.txt 中可完整复现</div>
     </div>
 
-    <div class="g2" style="flex:1">
-      <div>
-        <div class="split-title">沿用课堂 demo</div>
-        <table>
-          <tr><th style="width:34%">来源</th><th>复用内容</th></tr>
-          <tr>
-            <td>demo_1<br><span class="small">Streamlit 界面</span></td>
-            <td>页面骨架、<code>st.chat_input</code> 对话交互、<code>st.session_state</code> 会话状态用法</td>
-          </tr>
-          <tr>
-            <td>demo_2<br><span class="small">接口与工具调用</span></td>
-            <td><code>OpenAI(api_key, base_url)</code> 客户端写法、<code>tools</code> 协议结构、工具结果回填的循环骨架</td>
-          </tr>
-        </table>
-        <div class="note" style="margin-top:.8rem; font-size:.8rem">
-          沿用的是“怎么把模型接进来”，业务逻辑部分全部重写。
-        </div>
+    <div class="wrap">
+      <div class="cards3" style="gap:.7rem">
+        <div class="card top rv" style="--c:#2563EB; --d:.02s"><div class="ct">Python 3.13</div><div class="cd">运行环境 · 数据处理生态完整</div></div>
+        <div class="card top rv" style="--c:#0D9488; --d:.06s"><div class="ct">Streamlit ≥ 1.36</div><div class="cd">页面、交互、会话状态</div></div>
+        <div class="card top rv" style="--c:#7C3AED; --d:.1s"><div class="ct">openai SDK ≥ 1.40</div><div class="cd">调用 DashScope 兼容接口</div></div>
+        <div class="card top rv" style="--c:#D97706; --d:.14s"><div class="ct">qwen-plus</div><div class="cd">意图理解与工具决策</div></div>
+        <div class="card top rv" style="--c:#2563EB; --d:.18s"><div class="ct">pandas ≥ 2.0</div><div class="cd">筛选、分组、汇总计算</div></div>
+        <div class="card top rv" style="--c:#0D9488; --d:.22s"><div class="ct">plotly ≥ 5.20</div><div class="cd">交互式柱状图</div></div>
+        <div class="card top rv" style="--c:#7C3AED; --d:.26s"><div class="ct">openpyxl ≥ 3.1</div><div class="cd">生成 xlsx 报表</div></div>
+        <div class="card top rv" style="--c:#D97706; --d:.3s"><div class="ct">python-dotenv</div><div class="cd">密钥与代码分离</div></div>
+        <div class="card top rv" style="--c:#E11D48; --d:.34s"><div class="ct">AppTest / Git</div><div class="cd">端到端测试 · 版本管理</div></div>
       </div>
 
-      <div>
-        <div class="split-title">本项目新增</div>
-        <div class="feat-list">
-          <div class="f"><div class="dot"></div><div><div class="ft">三个业务工具</div>
-            <div class="fd">入参定义、返回结构、异常分支均自行设计</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">业务数据层</div>
-            <div class="fd">模拟数据表、条件筛选、按姓名分组、Excel 生成</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">稳定性处理</div>
-            <div class="fd">限流退避重试、备用模型、参数格式拦截、失败可重试</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">界面与可观测</div>
-            <div class="fd">双栏布局、工具日志分区、结果明细表格、运行日志</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">测试与交付</div>
-            <div class="fd">AppTest 端到端验证、requirements、.env 模板、仓库提交</div></div></div>
+      <div class="cards2 rv" style="--d:.42s; margin-top:.95rem; align-items:start">
+        <div class="code" style="font-size:.72rem">
+<span class="c"># 三步启动</span>
+pip install -r requirements.txt
+copy .env.example .env      <span class="c"># 填入自己的 Key</span>
+streamlit run app.py
+        </div>
+        <div class="card" style="--d:.46s">
+          <div class="ct">工程约定</div>
+          <div class="cd">
+            密钥仅存 <code>.env</code>，已被 gitignore 排除<br>
+            运行日志写 <code>logs/app.log</code>，便于排查失败<br>
+            页面提供「接口自检」，可单独验证连通性
+          </div>
         </div>
       </div>
     </div>
-    <div class="footline"><span>增量集中在业务实现与工程化，不在界面样式</span><span>09 / 12</span></div>
+    <div class="pageno"><span class="pn">09</span> / 12</div>
   </section>
 
-  <!-- 10 思政与合规 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">10 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">09 &nbsp;合规</div>
-      <h2>数据来源、隐私与使用边界</h2>
-      <div class="rule"></div>
+  <!-- ================= 10 与课堂实验 ================= -->
+  <section class="slide" style="--ac:#2563EB">
+    <div class="hd">
+      <div class="kicker">09 · 与课堂实验的关系</div>
+      <h2>沿用的是<em>接入方式</em>，业务代码全部重写</h2>
+      <div class="dek">demo_1 提供了界面骨架，demo_2 提供了接口与工具调用骨架</div>
     </div>
 
-    <div class="g2" style="flex:1">
-      <div class="stack">
+    <div class="wrap">
+      <div style="display:grid; grid-template-columns: 1fr 2.6rem 1fr; gap:.9rem; align-items:center">
         <div>
-          <div class="split-title">数据来源</div>
-          <ul>
-            <li>全部为课程自建模拟数据，无任何真实学生信息</li>
-            <li>姓名、学号均为虚构占位（张三 / 2023001）</li>
-            <li>数据仅存在于本机内存，不写入第三方服务</li>
-          </ul>
+          <div class="card top rv" style="--c:#2563EB; --d:.05s; margin-bottom:.7rem">
+            <div class="badge" style="--c:#2563EB">demo_1</div>
+            <div class="ct">Streamlit 界面</div>
+            <div class="cd">页面骨架 · <code>st.chat_input</code> 对话交互 · <code>st.session_state</code> 用法</div>
+          </div>
+          <div class="card top rv" style="--c:#0D9488; --d:.12s">
+            <div class="badge" style="--c:#0D9488">demo_2</div>
+            <div class="ct">接口与工具调用</div>
+            <div class="cd"><code>OpenAI(api_key, base_url)</code> 写法 · <code>tools</code> 协议结构 · 结果回填循环</div>
+          </div>
         </div>
-        <div>
-          <div class="split-title">隐私与密钥</div>
-          <ul>
-            <li>接口密钥存 <code>.env</code>，由 <code>.gitignore</code> 排除</li>
-            <li>代码、仓库、幻灯片中均不含密钥</li>
-            <li>页面不采集用户输入之外的信息</li>
-          </ul>
-        </div>
-      </div>
 
-      <div class="stack">
-        <div>
-          <div class="split-title">使用边界</div>
-          <ul>
-            <li>定位为课程演示原型，不作为正式认定依据</li>
-            <li>真实场景需补：登录鉴权、数据脱敏、操作留痕</li>
-            <li>统计结果须以学校志愿管理系统原始记录为准</li>
-          </ul>
-        </div>
-        <div>
-          <div class="split-title">学术诚信</div>
-          <ul>
-            <li>工具调用由模型真实发起，未用关键词判断伪造成 Agent 能力</li>
-            <li>数据由工具真实计算，未预埋答案</li>
-            <li>沿用 demo 的部分已在上一页如实说明</li>
+        <div class="arrowmid rv" style="--d:.2s">→</div>
+
+        <div class="card rv" style="--c:#7C3AED; --d:.26s; padding:.9rem 1.1rem">
+          <div class="badge" style="--c:#7C3AED">本项目新增</div>
+          <ul style="font-size:.78rem; margin-top:.2rem">
+            <li><b>三个业务工具</b>：入参、返回结构、异常分支均自行设计</li>
+            <li><b>业务数据层</b>：模拟表、条件筛选、按姓名分组、Excel 生成</li>
+            <li><b>稳定性处理</b>：限流退避重试、备用模型、参数格式拦截</li>
+            <li><b>界面与可观测</b>：双栏布局、日志分区、结果表格、运行日志</li>
+            <li><b>测试与交付</b>：AppTest 验证、依赖清单、环境模板、仓库提交</li>
           </ul>
         </div>
       </div>
     </div>
-    <div class="footline"><span>合规优先于演示效果</span><span>10 / 12</span></div>
+    <div class="pageno"><span class="pn">10</span> / 12</div>
   </section>
 
-  <!-- 11 不足与改进 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">11 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">10 &nbsp;反思</div>
-      <h2>已知不足与后续计划</h2>
-      <div class="rule"></div>
+  <!-- ================= 11 合规 ================= -->
+  <section class="slide" style="--ac:#D97706">
+    <div class="hd">
+      <div class="kicker">10 · 合规说明</div>
+      <h2>数据来源、隐私与<em>使用边界</em></h2>
+      <div class="dek">演示效果让位于合规：不使用真实学生信息，不在交付物中出现密钥</div>
     </div>
 
-    <div class="g2" style="flex:1">
-      <div>
-        <div class="split-title">当前不足</div>
-        <table>
-          <tr><th style="width:36%">问题</th><th>影响</th></tr>
-          <tr><td>数据存于内存</td><td>刷新页面或重启即恢复样例，无法长期积累</td></tr>
-          <tr><td>单用户运行</td><td>无登录与权限，多人同时使用会互串状态</td></tr>
-          <tr><td>筛选维度有限</td><td>仅支持日期与项目名，无法按姓名或时长区间查询</td></tr>
-          <tr><td>相对时间依赖模型</td><td>“上个月”等表述偶有偏差，需用户补具体日期</td></tr>
-          <tr><td>无导出留痕</td><td>多次导出只保留最新一份，无历史记录</td></tr>
-        </table>
-      </div>
-
-      <div>
-        <div class="split-title">后续计划</div>
-        <div class="feat-list">
-          <div class="f"><div class="dot"></div><div><div class="ft">数据持久化</div>
-            <div class="fd">接入 SQLite，记录可长期保存并按学期归档</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">权限与流程</div>
-            <div class="fd">登录鉴权 + 提交、审核、归档三步流程，导出需确认</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">工具扩展</div>
-            <div class="fd">个人明细查询、月度趋势、未达标人员提醒</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">部署方式</div>
-            <div class="fd">容器化部署，支持多人同时访问</div></div></div>
-          <div class="f"><div class="dot"></div><div><div class="ft">对接真实数据</div>
-            <div class="fd">替换为学校志愿系统导出的标准格式</div></div></div>
+    <div class="wrap">
+      <div class="cards4">
+        <div class="card top rv" style="--c:#2563EB; --d:.02s">
+          <div class="badge" style="--c:#2563EB">数据来源</div>
+          <div class="cd">全部为课程自建模拟数据，姓名学号为虚构占位；仅存在于本机内存，不写入第三方服务</div>
+        </div>
+        <div class="card top rv" style="--c:#0D9488; --d:.08s">
+          <div class="badge" style="--c:#0D9488">隐私与密钥</div>
+          <div class="cd">密钥存 <code>.env</code> 并由 gitignore 排除；代码、仓库、幻灯片中均不含真实 Key</div>
+        </div>
+        <div class="card top rv" style="--c:#D97706; --d:.14s">
+          <div class="badge" style="--c:#D97706">使用边界</div>
+          <div class="cd">课程演示原型，不作正式认定依据；真实场景需补登录鉴权、数据脱敏、操作留痕</div>
+        </div>
+        <div class="card top rv" style="--c:#7C3AED; --d:.2s">
+          <div class="badge" style="--c:#7C3AED">学术诚信</div>
+          <div class="cd">工具调用由模型真实发起，未用关键词判断伪造能力；数据由工具真实计算，无预埋答案</div>
         </div>
       </div>
+
+      <div class="note rv" style="--d:.3s; margin-top:1rem">
+        统计结果最终以学校志愿管理系统的原始记录为准；本工具用于减轻重复劳动，不替代认定流程。
+      </div>
     </div>
-    <div class="footline"><span>优先解决持久化与权限，再扩展分析能力</span><span>11 / 12</span></div>
+    <div class="pageno"><span class="pn">11</span> / 12</div>
   </section>
 
-  <!-- 12 结尾 -->
-  <section class="slide">
-    <div class="runhead"><span>校园志愿时长汇总助手</span><span class="right">12 / 12</span></div>
-    <div class="head">
-      <div class="eyebrow">11 &nbsp;小结</div>
-      <h2>把接口示例做成一个能用的工具</h2>
-      <div class="rule"></div>
+  <!-- ================= 12 不足与结尾 ================= -->
+  <section class="slide" style="--ac:#7C3AED">
+    <div class="hd">
+      <div class="kicker">11 · 反思与计划</div>
+      <h2>已知不足与<em>下一步</em></h2>
+      <div class="dek">优先解决数据持久化与权限，再扩展分析能力</div>
     </div>
 
-    <div class="g3" style="flex:1; align-items:start">
-      <div>
-        <div class="split-title">完成的工作</div>
-        <ul style="font-size:.84rem">
-          <li>三个自主设计的业务工具</li>
-          <li>基于真实 Function Calling 的调用链</li>
-          <li>可演示的界面、日志与结果展示</li>
-          <li>仓库交付：代码、文档、幻灯片</li>
-        </ul>
+    <div class="wrap">
+      <div class="cards2" style="align-items:start">
+        <div class="card top rv" style="--c:#E11D48; --d:.02s">
+          <div class="badge" style="--c:#E11D48">当前不足</div>
+          <div class="cd">
+            数据存于内存，重启即恢复样例<br>
+            单用户运行，无登录与多用户隔离<br>
+            筛选维度有限，仅日期与项目名<br>
+            相对时间依赖模型换算，偶有偏差<br>
+            多次导出只保留最新一份，无留痕
+          </div>
+        </div>
+        <div class="card top rv" style="--c:#0D9488; --d:.1s">
+          <div class="badge" style="--c:#0D9488">后续计划</div>
+          <div class="cd">
+            接入 SQLite，按学期归档数据<br>
+            登录鉴权 + 提交、审核、归档三步流程<br>
+            扩展工具：个人明细、月度趋势、未达标提醒<br>
+            容器化部署，支持多人同时访问
+          </div>
+        </div>
       </div>
-      <div>
-        <div class="split-title">遇到的问题</div>
-        <ul style="font-size:.84rem">
-          <li>模型回传大数组导致参数截断</li>
-          <li>业务空间限流造成调用中断</li>
-          <li>编辑器主题与页面配色冲突</li>
-        </ul>
-        <div class="small" style="margin-top:.5rem">均已定位并修复，处理方式见 README。</div>
-      </div>
-      <div>
-        <div class="split-title">收获</div>
-        <ul style="font-size:.84rem">
-          <li>Function Calling 的分工边界</li>
-          <li>工具参数设计对稳定性的影响更大</li>
-          <li>异常与边界处理决定能否用于真实业务</li>
-        </ul>
-      </div>
-    </div>
 
-    <div style="border-top:.05rem solid var(--line); padding-top:1rem; display:flex; justify-content:space-between; align-items:baseline;">
-      <div style="font-size:1.3rem; font-weight:700; color:var(--ink)">谢谢，欢迎提问</div>
-      <div class="small mono">github.com/ZWQ-Tech/volunteer-hours-assistant</div>
+      <div class="rv" style="--d:.24s; margin-top:1.5rem; padding-top:1.15rem; border-top:.05rem solid var(--line); display:flex; justify-content:space-between; align-items:baseline; width:100%">
+        <div style="font-size:1.55rem; font-weight:800; color:var(--ink)">谢谢，欢迎提问</div>
+        <div class="small mono">github.com/ZWQ-Tech/volunteer-hours-assistant</div>
+      </div>
     </div>
-    <div class="footline"><span>2026.10</span><span>12 / 12</span></div>
+    <div class="pageno"><span class="pn">12</span> / 12</div>
   </section>
 
 </div>
 
-<div class="hud"><span id="pageNo">1</span> / 12</div>
+<div class="dots" id="dots"></div>
+<div class="pageno" id="pageno" style="display:none"></div>
 <div class="keys">← → 翻页 · 空格下一页 · P 打印</div>
 
 <script>
   var slides = document.querySelectorAll('.slide');
-  var idx = 0, total = slides.length;
+  var total = slides.length, idx = 0;
   var BASE_W = 1280, BASE_H = 720;
 
+  /* 页码指示 */
+  var dotsBox = document.getElementById('dots');
+  for (var i = 0; i < total; i++) {
+    var s = document.createElement('span');
+    s.dataset.i = i;
+    dotsBox.appendChild(s);
+  }
+  var dots = dotsBox.querySelectorAll('span');
+  var progBar = document.getElementById('progBar');
+
   function renderSize() {
-    var s = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
-    document.documentElement.style.fontSize = (16 * s) + 'px';
+    var k = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H) * 0.97;
+    document.documentElement.style.fontSize = (16 * k) + 'px';
     var deck = document.getElementById('deck');
-    deck.style.width = (80 * 16 * s) + 'px';
-    deck.style.height = (45 * 16 * s) + 'px';
+    deck.style.width = (80 * 16 * k) + 'px';
+    deck.style.height = (45 * 16 * k) + 'px';
+  }
+
+  function countUp(el) {
+    var to = parseFloat(el.dataset.count);
+    if (isNaN(to)) return;
+    var dec = (el.dataset.count.indexOf('.') > -1) ? 1 : 0;
+    var suffix = el.querySelector('i') ? el.querySelector('i').outerHTML : '';
+    var t0 = null, dur = 850;
+    function tick(t) {
+      if (!t0) t0 = t;
+      var p = Math.min((t - t0) / dur, 1);
+      var v = to * (1 - Math.pow(1 - p, 3));
+      el.innerHTML = v.toFixed(dec) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+      else el.innerHTML = to.toFixed(dec) + suffix;
+    }
+    requestAnimationFrame(tick);
   }
 
   function show(n) {
@@ -825,7 +906,11 @@ streamlit run app.py
     slides[idx].classList.remove('active');
     idx = n;
     slides[idx].classList.add('active');
-    document.getElementById('pageNo').textContent = idx + 1;
+
+    dots.forEach(function (d, i) { d.classList.toggle('on', i === idx); });
+    progBar.style.width = ((idx + 1) / total * 100) + '%';
+
+    slides[idx].querySelectorAll('[data-count]').forEach(countUp);
   }
 
   document.addEventListener('keydown', function (e) {
@@ -837,17 +922,22 @@ streamlit run app.py
   });
 
   document.addEventListener('click', function (e) {
-    if (e.clientX < window.innerWidth * 0.22) show(idx - 1);
+    if (e.target.closest('.dots')) return;
+    if (e.clientX < window.innerWidth * 0.2) show(idx - 1);
     else show(idx + 1);
   });
 
-  var startX = null;
-  document.addEventListener('touchstart', function (e) { startX = e.touches[0].clientX; });
+  dotsBox.addEventListener('click', function (e) {
+    if (e.target.dataset.i !== undefined) show(parseInt(e.target.dataset.i, 10));
+  });
+
+  var sx = null;
+  document.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; });
   document.addEventListener('touchend', function (e) {
-    if (startX === null) return;
-    var dx = e.changedTouches[0].clientX - startX;
+    if (sx === null) return;
+    var dx = e.changedTouches[0].clientX - sx;
     if (Math.abs(dx) > 40) show(idx + (dx < 0 ? 1 : -1));
-    startX = null;
+    sx = null;
   });
 
   window.addEventListener('resize', renderSize);
