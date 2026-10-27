@@ -366,11 +366,11 @@
       <h1 class="rv" style="--d:.18s">校园志愿时长汇总助手</h1>
       <div class="sub rv" style="--d:.32s">
         Streamlit × 通义千问 Tool Calling<br>
-        用一句话完成「查询 · 统计 · 导出报表」，并推送身边的志愿活动
+        用一句话完成「查询 · 统计 · 导出报表」，并推送上海全市的志愿活动
       </div>
       <div class="chips rv" style="--d:.46s">
         <span class="chip">4 个业务工具</span>
-        <span class="chip">绑定学校 · 活动推送</span>
+        <span class="chip">上海杉达 · 全市活动推送</span>
         <span class="chip">网页内导出 Excel</span>
         <span class="chip">工具调用可视化</span>
       </div>
@@ -463,7 +463,7 @@
           <div class="badge" style="--c:#7C3AED">链路二 · 活动发现</div>
           <div class="cd">
             绑定学校 → <code>query_open_activities</code> 一次调用返回结果；<br>
-            校内看实时刷新，校外按距离近远排队
+            校内实时刷新，上海全市校外按距离排队、可点开报名
           </div>
         </div>
       </div>
@@ -541,7 +541,7 @@
       </div>
 
       <div class="note rv" style="--d:.48s; margin-top:1rem">
-        全流程约 3 次模型请求。若问的是活动（如"附近 3 公里有环保活动吗"），则走单轮分支：直接调用 <b>query_open_activities</b> 并返回距离排序结果。
+        全流程约 3 次模型请求。若问的是活动（如"浦东新区有什么科普活动"），则走单轮分支：直接调用 <b>query_open_activities</b> 并按距离返回。
       </div>
     </div>
     <div class="pageno"><span class="pn">05</span> / 12</div>
@@ -590,7 +590,7 @@
           <div class="nm">query_open_activities</div>
           <div class="pr">
             <b>scope</b> 可选 · 校内/校外<br>
-            <b>radius_km</b> 可选 · 默认 5<br>
+            <b>district</b> 可选 · 上海各区<br>
             <b>keyword</b> 可选
           </div>
           <div class="rt">{ status, school, on_campus[], off_campus[] }<br>校外按距离升序</div>
@@ -602,9 +602,10 @@
 <span class="k">"name"</span>: <span class="s">"query_open_activities"</span>,
 <span class="k">"parameters"</span>: {
   <span class="k">"properties"</span>: {
-    <span class="k">"scope"</span>:     {<span class="k">"enum"</span>: [<span class="s">"all"</span>,<span class="s">"on_campus"</span>,<span class="s">"off_campus"</span>]},
-    <span class="k">"radius_km"</span>: {<span class="k">"type"</span>: <span class="s">"number"</span>},
-    <span class="k">"keyword"</span>:   {<span class="k">"type"</span>: <span class="s">"string"</span>}
+    <span class="k">"scope"</span>:    {<span class="k">"enum"</span>: [<span class="s">"all"</span>,<span class="s">"on_campus"</span>,<span class="s">"off_campus"</span>]},
+    <span class="k">"district"</span>: {<span class="k">"type"</span>: <span class="s">"string"</span>, <span class="c"># 浦东新区 / 徐汇区…</span>
+                 <span class="k">"description"</span>: <span class="s">"上海某个区，不传=全市"</span>},
+    <span class="k">"keyword"</span>:  {<span class="k">"type"</span>: <span class="s">"string"</span>}
   },
   <span class="k">"required"</span>: []
 }</div>
@@ -623,7 +624,7 @@
           </div>
           <div class="card top" style="--c:#2563EB">
             <div class="ct">取舍四 · 距离不由模型算</div>
-            <div class="cd">半径与排序交给 Haversine 公式，防止模型编造距离</div>
+            <div class="cd">距离排序交给 Haversine 公式，区域由参数限定，防止模型编造</div>
           </div>
         </div>
       </div>
@@ -676,15 +677,15 @@
             <div class="minibtn">⬇ 下载 志愿时长汇总.xlsx</div>
           </div>
           <div class="panel" style="grid-column:1 / -1">
-            <div class="ptitle">活动中心 · 已绑定「江城大学（本部）」 · 校内 4 项 / 校外 4 项</div>
+            <div class="ptitle">活动中心 · 已绑定「上海杉达学院（金海校区）」 · 校内 6 项 / 上海全市校外 12 项 · 覆盖 9 个区</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:.4rem">
               <div class="logrow" style="--c:#22C55E; margin:0">
-                <b>校园图书馆图书整理</b> <em>NEW</em><br>
-                10-28 14:00-17:00 · 3.0h · 已报 24/30
+                <b>图书馆书库整理与导读</b> <em>NEW</em><br>
+                10-29 14:00-17:00 · 3.0h · 余 9 · 详情可展开 → 报名
               </div>
               <div class="logrow" style="--c:#D97706; margin:0">
-                <b>社区垃圾分类宣传</b> <em>2.1 km</em><br>
-                10-29 09:00-13:00 · 4.0h · 已报 11/20
+                <b>地铁 12 号线金海路站客流引导</b> <em>浦东新区 · 2.4 km</em><br>
+                10-28 16:30-19:30 · 3.0h · 余 8 · 报名→上海志愿者网
               </div>
             </div>
           </div>
@@ -899,7 +900,7 @@ streamlit run app.py</div>
         <div style="display:grid; grid-template-columns:1fr 2.2rem 1fr 2.2rem 1fr 2.2rem 1fr; gap:.4rem; align-items:center; width:100%">
           <div class="card top" style="--c:#7C3AED; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">① 绑定学校</div><div class="cd" style="font-size:.72rem">左侧栏选校，顶部出现状态条</div></div>
           <div style="text-align:center; color:var(--muted)">→</div>
-          <div class="card top" style="--c:#0D9488; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">② 看活动中心</div><div class="cd" style="font-size:.72rem">校内刷新、校外拖动半径</div></div>
+          <div class="card top" style="--c:#0D9488; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">② 看活动中心</div><div class="cd" style="font-size:.72rem">校内刷新、全市按区筛选</div></div>
           <div style="text-align:center; color:var(--muted)">→</div>
           <div class="card top" style="--c:#2563EB; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">③ 一句统计</div><div class="cd" style="font-size:.72rem">对话触发三次链式调用</div></div>
           <div style="text-align:center; color:var(--muted)">→</div>

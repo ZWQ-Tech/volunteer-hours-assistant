@@ -48,9 +48,11 @@ SYSTEM_PROMPT = (
     "统计前必须先调用查询工具；导出前必须先完成统计。"
     "调用统计和导出工具时不要自己回传数据数组（省略 records / summary 参数即可），"
     "工具会自动使用最近一次查询或统计的结果。"
-    "当用户询问最近有什么志愿活动、校内活动、校外/附近活动时，调用 query_open_activities；"
+    "当用户询问最近有什么志愿活动、校内活动、校外/上海全市活动时，调用 query_open_activities；"
+    "该工具支持按 scope 区分校内/校外、按 district 限定上海某个区、按 keyword 过滤；"
     "若该工具返回未绑定学校，请提示用户在页面左侧「学校绑定」中选择并绑定学校。"
-    "回答活动类问题时，请按距离或日期列出要点，并提醒报名截止与剩余名额。"
+    "回答活动类问题时，请按日期或距离列出要点，说明主办方、时间、时长、剩余名额与所在区，"
+    "并在末尾提示用户可在活动卡片下方展开查看详情、通过报名链接前往官方平台报名。"
     "回答请简洁、使用中文。"
 )
 
@@ -69,61 +71,243 @@ DEFAULT_DATA = [
 ]
 
 # ============================ 学校与志愿活动数据 ============================
-# 可绑定学校（含坐标，用于计算校外活动距离）
+# 可绑定学校（真实校区与坐标，用于计算校外活动距离）
 SCHOOLS = [
-    {"名称": "江城大学（本部）", "城市": "武汉", "校区": "本部校区", "lat": 30.5271, "lng": 114.3613},
-    {"名称": "江城大学（南湖校区）", "城市": "武汉", "校区": "南湖校区", "lat": 30.4877, "lng": 114.3402},
-    {"名称": "华光理工大学", "城市": "武汉", "校区": "光谷校区", "lat": 30.5123, "lng": 114.4102},
-    {"名称": "明德师范大学", "城市": "武汉", "校区": "桂子山校区", "lat": 30.5421, "lng": 114.2987},
+    {"名称": "上海杉达学院（金海校区）", "城市": "上海", "校区": "金海校区",
+     "地址": "浦东新区金海路 2727 号", "lat": 31.268682, "lng": 121.659202,
+     "官网": "https://www.sandau.edu.cn", "查号": "021-50210894"},
+    {"名称": "上海杉达学院（嘉善校区）", "城市": "嘉兴", "校区": "嘉善校区",
+     "地址": "浙江省嘉善县人民大道 505 号", "lat": 30.828400, "lng": 120.928300,
+     "官网": "https://www.sandau.edu.cn", "查号": "0573-84239202"},
+    {"名称": "复旦大学（邯郸校区）", "城市": "上海", "校区": "邯郸校区",
+     "地址": "杨浦区邯郸路 220 号", "lat": 31.298900, "lng": 121.503300,
+     "官网": "https://www.fudan.edu.cn", "查号": "021-65642222"},
+    {"名称": "上海交通大学（闵行校区）", "城市": "上海", "校区": "闵行校区",
+     "地址": "闵行区东川路 800 号", "lat": 31.024300, "lng": 121.433800,
+     "官网": "https://www.sjtu.edu.cn", "查号": "021-54740000"},
+    {"名称": "同济大学（四平路校区）", "城市": "上海", "校区": "四平路校区",
+     "地址": "杨浦区四平路 1239 号", "lat": 31.282900, "lng": 121.506000,
+     "官网": "https://www.tongji.edu.cn", "查号": "021-65982200"},
 ]
+
+# 上海各区（校外活动区域筛选）
+SHANGHAI_DISTRICTS = [
+    "浦东新区", "黄浦区", "徐汇区", "长宁区", "静安区", "普陀区",
+    "虹口区", "杨浦区", "闵行区", "宝山区", "嘉定区", "松江区", "青浦区", "奉贤区",
+]
+
+# 报名入口（官方平台）
+LINK_SANDA = "https://www.sandau.edu.cn"          # 上海杉达学院官网（校团委通知/志愿招募）
+LINK_SH_VOL = "https://www.volunteer.sh.cn"       # 上海志愿者网（全市志愿项目报名）
+LINK_SSTM = "https://www.sstm.org.cn"             # 上海科技馆 / 天文馆志愿者
+LINK_LIB = "https://www.library.sh.cn"            # 上海图书馆志愿者
+LINK_ART = "https://www.artmuseumonline.org"      # 中华艺术宫
+LINK_BLOOD = "https://www.sbc.org.cn"             # 上海市血液中心
 
 # 校内活动（模拟“实时更新”：报名人数会随时间增长）
 ON_CAMPUS = [
-    {"id": "C101", "标题": "图书馆图书整理志愿岗", "主办": "校图书馆", "地点": "本部图书馆 3F 书库",
-     "日期": "2026-10-29", "时间段": "14:00-17:00", "时长": 3.0, "名额": 20, "已报名": 14,
-     "标签": ["图书管理", "室内"], "更新时间": 6},
-    {"id": "C102", "标题": "校运会赛事保障志愿者", "主办": "校体育运动委员会", "地点": "东区田径场",
-     "日期": "2026-10-31", "时间段": "08:00-12:00", "时长": 4.0, "名额": 40, "已报名": 37,
-     "标签": ["大型活动", "户外"], "更新时间": 12},
-    {"id": "C103", "标题": "实验室开放日引导员", "主办": "实验教学中心", "地点": "理学院实验楼 A 座",
-     "日期": "2026-11-02", "时间段": "09:00-12:00", "时长": 3.0, "名额": 12, "已报名": 5,
-     "标签": ["科普", "引导"], "更新时间": 25},
-    {"id": "C104", "标题": "无偿献血现场服务", "主办": "校医院 · 红十字会", "地点": "大学生活动中心 1 号厅",
-     "日期": "2026-11-05", "时间段": "10:00-16:00", "时长": 6.0, "名额": 25, "已报名": 11,
-     "标签": ["公益", "医疗协助"], "更新时间": 48},
+    {"id": "C101", "标题": "图书馆书库整理与导读", "主办": "杉达学院图书馆", "地点": "金海校区图书馆 3F 书库",
+     "日期": "2026-10-29", "时间段": "14:00-17:00", "时长": 3.0, "名额": 25, "已报名": 16,
+     "标签": ["图书管理", "室内"], "更新时间": 4, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "协助馆员完成书库错架整理、新书上架与阅览区导读，服务对象为全校师生。",
+              "招募对象": "在校生，专业不限；需能连续站立 2 小时以上",
+              "集合": "图书馆 1F 服务台，提前 10 分钟签到并领取志愿马甲",
+              "联系人": "图书馆读者服务部 王老师（021-20262610）",
+              "注意": "馆内保持安静；贵重物品随身携带；服务结束后现场签退认定时长"}},
+    {"id": "C102", "标题": "校运会赛事保障志愿者", "主办": "校体育运动委员会", "地点": "金海校区东区田径场",
+     "日期": "2026-10-31", "时间段": "08:00-12:00", "时长": 4.0, "名额": 40, "已报名": 34,
+     "标签": ["大型活动", "户外"], "更新时间": 9, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "负责检录引导、器材搬运、赛道秩序维护与终点搀扶，保障校田径运动会顺利进行。",
+              "招募对象": "在校生，身体健康；有急救证者优先",
+              "集合": "东区田径场主席台西侧志愿者服务点",
+              "联系人": "校体委办公室 李老师（021-20262610 转 3）",
+              "注意": "穿运动鞋、自备防晒；雨天照常举行，请携带雨具"}},
+    {"id": "C103", "标题": "校园开放日招生咨询引导", "主办": "招生办公室", "地点": "金海校区南门报到大厅",
+     "日期": "2026-11-07", "时间段": "09:00-16:00", "时长": 6.0, "名额": 30, "已报名": 12,
+     "标签": ["引导", "对外接待"], "更新时间": 21, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "为前来参加校园开放日的高中生及家长提供路线引导、资料发放与常见问题解答。",
+              "招募对象": "在校生，普通话标准，熟悉校园布局",
+              "集合": "南门报到大厅志愿者签到处",
+              "联系人": "招生办 张老师（021-50210897）",
+              "注意": "提前参加 11-06 晚 30 分钟线上培训；统一着校徽志愿者服"}},
+    {"id": "C104", "标题": "无偿献血现场服务", "主办": "校医院 · 上海市血液中心", "地点": "大学生活动中心 1 号厅",
+     "日期": "2026-11-03", "时间段": "10:00-16:00", "时长": 6.0, "名额": 30, "已报名": 13,
+     "标签": ["公益", "医疗协助"], "更新时间": 33, "报名链接": LINK_BLOOD,
+     "详情": {"介绍": "配合血液中心医护人员完成登记填表、排队引导、糖水发放与献血后观察陪护。",
+              "招募对象": "在校生，无传染性疾病；本人不参与献血",
+              "集合": "大学生活动中心 1 号厅入口",
+              "联系人": "校医院保健科（021-20262610 转 6）",
+              "注意": "服务期间佩戴口罩；不得代替医护人员做任何医学判断"}},
+    {"id": "C105", "标题": "“书香杉达”读书月布展", "主办": "校图书馆 · 学生会", "地点": "图书馆 1F 中庭",
+     "日期": "2026-11-05", "时间段": "13:00-17:00", "时长": 4.0, "名额": 15, "已报名": 5,
+     "标签": ["布展", "文化活动"], "更新时间": 47, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "参与读书月主题展板搭建、书目推荐卡制作与现场秩序维护。",
+              "招募对象": "在校生，有手工/设计经验者优先",
+              "集合": "图书馆 1F 中庭",
+              "联系人": "图书馆办公室 陈老师",
+              "注意": "使用美工刀等工具时注意安全；展后共同撤展"}},
+    {"id": "C106", "标题": "校园垃圾分类督导", "主办": "后勤保卫处", "地点": "学生公寓 3 号楼前投放点",
+     "日期": "2026-11-02", "时间段": "07:30-09:30", "时长": 2.0, "名额": 18, "已报名": 7,
+     "标签": ["环保", "校园治理"], "更新时间": 62, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "在早间投放高峰时段引导同学正确分类，记录混投情况并反馈后勤。",
+              "招募对象": "在校生，住在金海校区者优先",
+              "集合": "3 号楼前垃圾分类投放点",
+              "联系人": "后勤保卫处 环卫科",
+              "注意": "佩戴手套与袖标；遇到不配合情况只做劝导，不与同学争执"}},
 ]
 
-# 校外活动（带经纬度，按绑定学校计算距离）
+# 校外活动（覆盖上海全市各区，带经纬度，按绑定学校计算距离）
 OFF_CAMPUS = [
-    {"id": "O201", "标题": "社区敬老院陪伴服务", "主办": "江岸区青年志愿者协会", "地址": "江岸区解放大道 128 号",
-     "日期": "2026-10-30", "时间段": "09:00-12:00", "时长": 3.0, "名额": 15, "已报名": 9,
-     "标签": ["助老", "社区"], "lat": 30.6012, "lng": 114.3021, "更新时间": 8},
-    {"id": "O202", "标题": "地铁站文明引导服务", "主办": "市轨道交通志愿服务队", "地址": "地铁 2 号线街道口站",
-     "日期": "2026-11-01", "时间段": "16:00-19:00", "时长": 3.0, "名额": 20, "已报名": 12,
-     "标签": ["交通引导", "城市服务"], "lat": 30.5241, "lng": 114.3603, "更新时间": 15},
-    {"id": "O203", "标题": "城市书房周末伴读", "主办": "区图书馆", "地址": "武昌区图书馆少儿阅览室",
-     "日期": "2026-11-02", "时间段": "14:00-17:00", "时长": 3.0, "名额": 10, "已报名": 4,
-     "标签": ["伴读", "青少年"], "lat": 30.5468, "lng": 114.3162, "更新时间": 30},
-    {"id": "O204", "标题": "社区垃圾分类督导", "主办": "街道办事处城管科", "地址": "洪山区珞南街道 6 个投放点",
-     "日期": "2026-11-03", "时间段": "07:30-09:30", "时长": 2.0, "名额": 18, "已报名": 6,
-     "标签": ["环保", "社区治理"], "lat": 30.5102, "lng": 114.3721, "更新时间": 55},
+    {"id": "O201", "标题": "地铁 12 号线金海路站客流引导", "主办": "上海地铁志愿服务总队",
+     "地址": "浦东新区 · 金海路站站厅", "区域": "浦东新区",
+     "日期": "2026-10-28", "时间段": "16:30-19:30", "时长": 3.0, "名额": 20, "已报名": 12,
+     "标签": ["交通引导", "城市服务"], "lat": 31.262000, "lng": 121.635000, "更新时间": 3,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "晚高峰在闸机口与换乘通道引导客流、协助老人与携带大件行李乘客进出站。",
+              "招募对象": "18 岁以上，能听懂普通话与基本上海话",
+              "集合": "金海路站站长室（12 号线站厅层）",
+              "联系人": "地铁志愿总队 值班站长",
+              "注意": "不得进入轨行区；站内禁用自拍杆；需提前 15 分钟到岗接受安全交底"}},
+    {"id": "O202", "标题": "上海科技馆展厅科普引导", "主办": "上海科技馆志愿者服务基地",
+     "地址": "浦东新区 · 世纪大道 2000 号", "区域": "浦东新区",
+     "日期": "2026-11-01", "时间段": "09:00-17:00", "时长": 8.0, "名额": 30, "已报名": 22,
+     "标签": ["科普", "场馆服务"], "lat": 31.217600, "lng": 121.541900, "更新时间": 11,
+     "报名链接": LINK_SSTM,
+     "详情": {"介绍": "在常设展区提供路线指引、展项原理解说与秩序维护，是科技馆长期运行的品牌志愿岗。",
+              "招募对象": "在校大学生，理工科背景优先；需通过馆方线上岗前测试",
+              "集合": "科技馆 1 号门志愿者之家",
+              "联系人": "科技馆志愿者基地（021-68622000）",
+              "注意": "全天岗，午餐由馆方提供；须穿平底鞋，馆内不可饮食"}},
+    {"id": "O203", "标题": "上海图书馆东馆“书香伴读”", "主办": "上海图书馆（东馆）",
+     "地址": "浦东新区 · 合欢路 300 号", "区域": "浦东新区",
+     "日期": "2026-11-04", "时间段": "13:30-17:30", "时长": 4.0, "名额": 15, "已报名": 9,
+     "标签": ["伴读", "图书管理"], "lat": 31.222600, "lng": 121.550300, "更新时间": 18,
+     "报名链接": LINK_LIB,
+     "详情": {"介绍": "在少儿阅览区陪伴小读者阅读、整理归还图书并协助自助借还机使用。",
+              "招募对象": "在校生，喜爱与儿童沟通",
+              "集合": "东馆 1F 少儿区服务台",
+              "联系人": "上图读者服务中心",
+              "注意": "需保持安静；不与小读者单独离开阅览区"}},
+    {"id": "O204", "标题": "中华艺术宫观众服务", "主办": "中华艺术宫（上海美术馆）",
+     "地址": "浦东新区 · 上南路 205 号", "区域": "浦东新区",
+     "日期": "2026-11-06", "时间段": "10:00-16:00", "时长": 6.0, "名额": 20, "已报名": 7,
+     "标签": ["美术", "讲解"], "lat": 31.183700, "lng": 121.489600, "更新时间": 26,
+     "报名链接": LINK_ART,
+     "详情": {"介绍": "为参观者提供导览路线咨询、重点展品讲解与文明观展提醒。",
+              "招募对象": "在校生，对美术史有兴趣；需参加 1 次线上培训",
+              "集合": "艺术宫 0 米层观众服务中心",
+              "联系人": "艺术宫公共教育部",
+              "注意": "展厅内禁止触摸展品；讲解口径以馆方提供文稿为准"}},
+    {"id": "O205", "标题": "徐汇滨江“文明游园”劝导", "主办": "徐汇区新时代文明实践中心",
+     "地址": "徐汇区 · 龙腾大道西岸沿线", "区域": "徐汇区",
+     "日期": "2026-11-08", "时间段": "14:00-18:00", "时长": 4.0, "名额": 25, "已报名": 10,
+     "标签": ["环保", "城市治理"], "lat": 31.188000, "lng": 121.459000, "更新时间": 35,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "沿滨江步道劝导遛狗牵绳、垃圾分类投放，并为游客提供问路指引。",
+              "招募对象": "在校生，能连续步行 3 公里以上",
+              "集合": "西岸艺术中心 A 馆前广场志愿驿站",
+              "联系人": "徐汇区志愿服务中心",
+              "注意": "统一发放马甲与垃圾夹；劝导以礼为先，不强制"}},
+    {"id": "O206", "标题": "南京东路步行街文明引导", "主办": "黄浦区志愿者协会",
+     "地址": "黄浦区 · 南京东路世纪广场", "区域": "黄浦区",
+     "日期": "2026-11-09", "时间段": "15:00-19:00", "时长": 4.0, "名额": 30, "已报名": 18,
+     "标签": ["交通引导", "大客流"], "lat": 31.237000, "lng": 121.475000, "更新时间": 41,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "节假日大客流时段在步行街值守，提供问路咨询、协助疏导人流与应急联络。",
+              "招募对象": "在校生，表达清晰，能应对大客流环境",
+              "集合": "世纪广场志愿服务亭",
+              "联系人": "黄浦区志愿者协会",
+              "注意": "严禁与游客发生冲突；发现异常情况立即报告现场民警"}},
+    {"id": "O207", "标题": "静安寺街道“为老送餐”", "主办": "静安寺街道社区志愿服务中心",
+     "地址": "静安区 · 愚园路街区", "区域": "静安区",
+     "日期": "2026-11-10", "时间段": "10:30-13:30", "时长": 3.0, "名额": 12, "已报名": 6,
+     "标签": ["助老", "社区"], "lat": 31.225000, "lng": 121.445000, "更新时间": 52,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "为社区高龄独居老人配送午餐，并做简单的问候与居家安全观察记录。",
+              "招募对象": "在校生，耐心细致，会讲上海话者优先",
+              "集合": "静安寺街道社区食堂",
+              "联系人": "街道为老服务中心",
+              "注意": "不进入老人卧室；不代收钱款；异常情况当日反馈社工"}},
+    {"id": "O208", "标题": "杨浦滨江人民城市建设展示馆讲解", "主办": "杨浦区滨江志愿服务队",
+     "地址": "杨浦区 · 安浦路 461 号", "区域": "杨浦区",
+     "日期": "2026-11-11", "时间段": "09:30-14:30", "时长": 5.0, "名额": 10, "已报名": 4,
+     "标签": ["讲解", "城市历史"], "lat": 31.262000, "lng": 121.538000, "更新时间": 58,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "为参观团队提供展馆讲解，讲述杨浦滨江从工业锈带到生活秀带的转型历程。",
+              "招募对象": "在校生，普通话二级甲等以上优先；需背熟讲解稿",
+              "集合": "展示馆 1F 序厅",
+              "联系人": "滨江志愿服务队",
+              "注意": "讲解稿以馆方最新版本为准；每场讲解不超过 40 分钟"}},
+    {"id": "O209", "标题": "上海市血液中心献血屋服务", "主办": "上海市血液中心",
+     "地址": "长宁区 · 虹桥路 1191 号", "区域": "长宁区",
+     "日期": "2026-11-12", "时间段": "09:00-13:00", "时长": 4.0, "名额": 15, "已报名": 8,
+     "标签": ["公益", "医疗协助"], "lat": 31.199000, "lng": 121.408000, "更新时间": 66,
+     "报名链接": LINK_BLOOD,
+     "详情": {"介绍": "在献血屋协助登记、引导体检流程、发放纪念品与献血后观察陪护。",
+              "招募对象": "在校生，身体健康；有志愿服务经历者优先",
+              "集合": "血液中心献血屋前台",
+              "联系人": "血液中心社会服务部",
+              "注意": "不接触血液标本；严格保护献血者隐私，不得拍照"}},
+    {"id": "O210", "标题": "顾村公园“赏樱季”文明引导", "主办": "宝山区绿化市容局志愿服务队",
+     "地址": "宝山区 · 沪太路 4788 号", "区域": "宝山区",
+     "日期": "2026-11-14", "时间段": "08:30-14:30", "时长": 6.0, "名额": 40, "已报名": 26,
+     "标签": ["环保", "大客流"], "lat": 31.348000, "lng": 121.370000, "更新时间": 72,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "在主要赏花点位维持游园秩序、劝导不文明行为、协助走失儿童求助。",
+              "招募对象": "在校生，能适应户外长时间站立",
+              "集合": "顾村公园 1 号门游客中心",
+              "联系人": "宝山区绿化市容局志愿队",
+              "注意": "园内禁用扩音器；垃圾随身带走；雨天活动顺延"}},
+    {"id": "O211", "标题": "松江大学城“爱心寒托班”助教", "主办": "松江区团委 · 社区少工委",
+     "地址": "松江区 · 文汇路街道社区学校", "区域": "松江区",
+     "日期": "2026-11-16", "时间段": "08:30-16:30", "时长": 8.0, "名额": 18, "已报名": 5,
+     "标签": ["支教", "青少年"], "lat": 31.038000, "lng": 121.220000, "更新时间": 80,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "协助班主任管理课堂纪律、辅导作业、组织手工与体育活动。",
+              "招募对象": "在校生，有家教或带班经验者优先；需提供健康承诺书",
+              "集合": "文汇路街道社区学校一楼大厅",
+              "联系人": "松江区团委学校部",
+              "注意": "全程两名志愿者在场；不得单独带学生离开教学区"}},
+    {"id": "O212", "标题": "普陀“半马苏河”驿站便民服务", "主办": "普陀区长寿路街道志愿服务中心",
+     "地址": "普陀区 · 苏州河长寿段驿站", "区域": "普陀区",
+     "日期": "2026-11-15", "时间段": "09:00-12:00", "时长": 3.0, "名额": 14, "已报名": 3,
+     "标签": ["便民", "社区"], "lat": 31.240000, "lng": 121.425000, "更新时间": 88,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "在滨河驿站提供饮水、充电、应急药品借用与路线咨询服务。",
+              "招募对象": "在校生，性格开朗，能使用基础办公设备",
+              "集合": "半马苏河驿站（长寿路段）",
+              "联系人": "长寿路街道志愿服务中心",
+              "注意": "药品仅登记发放，不做用药建议；每日盘点物资"}},
 ]
 
 # 定时注入的新活动（模拟推送到达）
 NEW_POOL = [
-    {"kind": "on", "id": "C105", "标题": "新生心理健康讲座协助", "主办": "心理健康教育中心", "地点": "学术报告厅",
+    {"kind": "on", "id": "C107", "标题": "新生心理健康讲座协助", "主办": "心理健康教育中心", "地点": "金海校区学术报告厅",
      "日期": "2026-11-06", "时间段": "18:30-21:00", "时长": 2.5, "名额": 8, "已报名": 1,
-     "标签": ["讲座协助", "室内"], "更新时间": 1},
-    {"kind": "off", "id": "O205", "标题": "社区儿童课业辅导", "主办": "希望工程志愿服务队", "地址": "硚口区汉正街社区服务中心",
-     "日期": "2026-11-07", "时间段": "09:00-11:30", "时长": 2.5, "名额": 12, "已报名": 3,
-     "标签": ["支教", "青少年"], "lat": 30.5781, "lng": 114.2654, "更新时间": 1},
-    {"kind": "on", "id": "C106", "标题": "校园反诈宣传摊位", "主办": "保卫处 · 学生会", "地点": "学生食堂西门广场",
+     "标签": ["讲座协助", "室内"], "更新时间": 1, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "负责入场签到、座位引导与讲座后问卷回收。", "招募对象": "在校生",
+              "集合": "学术报告厅前厅", "联系人": "心理健康教育中心", "注意": "讲座内容涉及同学隐私，不得录音录像"}},
+    {"kind": "off", "id": "O213", "标题": "虹口鲁迅公园“无障碍陪伴”", "主办": "虹口区残疾人联合会",
+     "地址": "虹口区 · 四川北路 2288 号", "区域": "虹口区",
+     "日期": "2026-11-13", "时间段": "13:30-16:30", "时长": 3.0, "名额": 12, "已报名": 9,
+     "标签": ["助残", "公园"], "lat": 31.273000, "lng": 121.478000, "更新时间": 1,
+     "报名链接": LINK_SH_VOL,
+     "详情": {"介绍": "陪同视障朋友游园，提供口述影像与路线引导。", "招募对象": "在校生，有耐心",
+              "集合": "鲁迅公园南门", "联系人": "虹口区残联", "注意": "先询问再搀扶；不擅自替对方做决定"}},
+    {"kind": "on", "id": "C108", "标题": "校园反诈宣传摊位", "主办": "保卫处 · 学生会", "地点": "学生食堂西门广场",
      "日期": "2026-11-08", "时间段": "11:00-13:00", "时长": 2.0, "名额": 10, "已报名": 2,
-     "标签": ["宣传", "安全"], "更新时间": 1},
-    {"kind": "off", "id": "O206", "标题": "江滩环保清洁行动", "主办": "绿色江城环保协会", "地址": "汉口江滩三阳广场",
-     "日期": "2026-11-09", "时间段": "08:00-11:00", "时长": 3.0, "名额": 30, "已报名": 8,
-     "标签": ["环保", "户外"], "lat": 30.5925, "lng": 114.3012, "更新时间": 1},
+     "标签": ["宣传", "安全"], "更新时间": 1, "报名链接": LINK_SANDA,
+     "详情": {"介绍": "发放反诈手册、指导同学安装国家反诈中心 APP。", "招募对象": "在校生",
+              "集合": "食堂西门广场", "联系人": "保卫处", "注意": "不代同学操作手机银行"}},
+    {"kind": "off", "id": "O214", "标题": "上海天文馆星空讲解志愿岗", "主办": "上海天文馆",
+     "地址": "浦东新区 · 临港大道 380 号", "区域": "浦东新区",
+     "日期": "2026-11-18", "时间段": "09:00-17:00", "时长": 8.0, "名额": 20, "已报名": 16,
+     "标签": ["科普", "讲解"], "lat": 30.910400, "lng": 121.925000, "更新时间": 1,
+     "报名链接": LINK_SSTM,
+     "详情": {"介绍": "在家园、宇宙、征程三大展区提供展项讲解与观展引导。", "招募对象": "在校生，天文爱好者优先",
+              "集合": "天文馆 1 号门志愿者之家", "联系人": "天文馆志愿者基地", "注意": "需提前完成馆方线上培训并考核"}},
 ]
+
 
 
 def haversine_km(lat1, lng1, lat2, lng2) -> float:
@@ -214,7 +398,8 @@ def init_state():
         st.session_state.toast = None            # 一次性提示
     # —— 学校绑定与活动推送 ——
     if "bound_school" not in st.session_state:
-        st.session_state.bound_school = None     # 当前绑定的学校（含坐标）
+        # 默认绑定上海杉达学院（金海校区），打开即可看到校内活动与上海全市推送
+        st.session_state.bound_school = dict(SCHOOLS[0])
     if "activities_on" not in st.session_state:
         st.session_state.activities_on = [dict(a) for a in ON_CAMPUS]
     if "activities_off" not in st.session_state:
@@ -225,8 +410,10 @@ def init_state():
         st.session_state.feed_tick_at = None     # 上次更新时间
     if "feed_polls" not in st.session_state:
         st.session_state.feed_polls = 0
-    if "push_radius" not in st.session_state:
-        st.session_state.push_radius = 5.0       # 校外推送半径（公里）
+    if "push_district" not in st.session_state:
+        st.session_state.push_district = "全部区域"   # 校外活动区域筛选
+    if "push_keyword" not in st.session_state:
+        st.session_state.push_keyword = ""           # 校外活动关键字
     if "new_push" not in st.session_state:
         st.session_state.new_push = None         # 新推送提示
 
@@ -327,8 +514,8 @@ def export_volunteer_excel(summary: list = None) -> dict:
         return {"status": "error", "message": f"导出失败：{e}"}
 
 
-def query_open_activities(scope: str = "all", radius_km: float = 5.0, keyword: str = "") -> dict:
-    """工具4：查询校内正在招募的志愿活动，以及校园周边校外活动（按距离由近到远）"""
+def query_open_activities(scope: str = "all", district: str = "", keyword: str = "") -> dict:
+    """工具4：查询校内正在招募的志愿活动，以及上海全市的校外活动（按距离由近到远）"""
     school = st.session_state.get("bound_school")
     if not school:
         return {
@@ -340,15 +527,22 @@ def query_open_activities(scope: str = "all", radius_km: float = 5.0, keyword: s
     scope_raw = str(scope or "all").lower()
     if scope_raw in ("on_campus", "on", "校内", "campus"):
         want_on, want_off = True, False
-    elif scope_raw in ("off_campus", "off", "校外", "nearby"):
+    elif scope_raw in ("off_campus", "off", "校外", "nearby", "上海", "shanghai"):
         want_on, want_off = False, True
     else:
         want_on, want_off = True, True
 
-    try:
-        radius = float(radius_km) if radius_km is not None else 5.0
-    except (TypeError, ValueError):
-        radius = 5.0
+    # 区域：空 / "all" / "全部" 视为不限（覆盖上海全市）
+    dist_raw = str(district or "").strip()
+    district_name = "" if dist_raw.lower() in ("", "all", "全部", "全部区域", "上海市", "上海") else dist_raw
+    if district_name and not district_name.endswith("区"):
+        district_name += "区"
+    if district_name and district_name not in SHANGHAI_DISTRICTS:
+        return {
+            "status": "error",
+            "message": f"未识别区域「{dist_raw}」。上海市可选区域：{'、'.join(SHANGHAI_DISTRICTS)}；"
+                       "也可以不传 district，默认推送上海全市的活动。",
+        }
 
     def _match(act):
         if not kw:
@@ -365,33 +559,54 @@ def query_open_activities(scope: str = "all", radius_km: float = 5.0, keyword: s
                 on_list.append({
                     "标题": a["标题"], "主办": a["主办"], "地点": a["地点"],
                     "日期": a["日期"], "时间段": a["时间段"], "时长(小时)": a["时长"],
+                    "名额": a["名额"], "已报名": a["已报名"],
                     "剩余名额": max(0, a["名额"] - a["已报名"]), "标签": a["标签"],
+                    "报名链接": a.get("报名链接", LINK_SANDA),
                 })
+        on_list.sort(key=lambda x: x["日期"])
     if want_off:
         for a in st.session_state.activities_off:
+            if district_name and a.get("区域") != district_name:
+                continue
             dist = haversine_km(school["lat"], school["lng"], a["lat"], a["lng"])
-            if dist <= radius and _match(a):
+            if _match(a):
                 off_list.append({
                     "标题": a["标题"], "主办": a["主办"], "地址": a["地址"],
-                    "距离km": dist, "日期": a["日期"], "时间段": a["时间段"],
-                    "时长(小时)": a["时长"], "剩余名额": max(0, a["名额"] - a["已报名"]),
-                    "标签": a["标签"],
+                    "区域": a.get("区域", ""), "距离km": dist, "日期": a["日期"],
+                    "时间段": a["时间段"], "时长(小时)": a["时长"],
+                    "名额": a["名额"], "已报名": a["已报名"],
+                    "剩余名额": max(0, a["名额"] - a["已报名"]),
+                    "标签": a["标签"], "报名链接": a.get("报名链接", LINK_SH_VOL),
                 })
         off_list.sort(key=lambda x: x["距离km"])
 
+    area_txt = district_name or "上海全市"
     if not on_list and not off_list:
         return {
             "status": "empty",
-            "message": f"在「{school['名称']}」附近未找到符合条件的活动"
-                       f"（关键词：{kw or '无'}，校外半径 {radius} km）。可放宽半径或换个关键词再试。",
+            "message": f"在「{school['名称']}」的{area_txt}范围内没有找到符合条件的活动"
+                       f"（关键词：{kw or '无'}）。可以换关键词或改为不限区域再试。",
         }
 
+    cover = len({a["区域"] for a in off_list})
+    parts = []
+    if want_on:
+        parts.append(f"校内 {len(on_list)} 个活动")
+    if want_off:
+        seg = f"{area_txt}校外 {len(off_list)} 个活动"
+        if district_name == "" and off_list:
+            seg += f"，覆盖 {cover} 个区"
+        parts.append(seg)
+    msg = "；".join(parts) + "。"
+    if want_off and off_list:
+        msg += "校外已按距校区的距离由近到远排序，每个活动都附有详情与官方报名链接。"
     return {
         "status": "success",
         "school": {"名称": school["名称"], "城市": school["城市"], "校区": school["校区"]},
+        "area": area_txt,
         "on_campus": on_list,
         "off_campus": off_list,
-        "message": f"校内 {len(on_list)} 个、校外 {len(off_list)} 个活动正在招募（校外半径 {radius} km）。",
+        "message": msg,
     }
 
 
@@ -458,22 +673,22 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_open_activities",
-            "description": "查询当前绑定学校可报名的志愿活动：校内活动列表，以及校园周边校外活动（按距离由近到远）。需要用户已绑定学校；未绑定时提示先去绑定。",
+            "description": "查询志愿活动：绑定学校的校内活动列表，以及上海全市的校外志愿活动（按距校区距离由近到远，含详细地址、所属区、报名链接）。需要用户已绑定学校；未绑定时提示先去绑定。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "scope": {
                         "type": "string",
                         "enum": ["all", "on_campus", "off_campus"],
-                        "description": "查询范围：all 全部 / on_campus 仅校内 / off_campus 仅校外",
+                        "description": "查询范围：all 全部 / on_campus 仅校内 / off_campus 仅校外（上海全市）",
                     },
-                    "radius_km": {
-                        "type": "number",
-                        "description": "校外活动搜索半径（公里），默认 5",
+                    "district": {
+                        "type": "string",
+                        "description": "可选。限定上海某个区，如 浦东新区、徐汇区；不传则返回上海全市的校外活动",
                     },
                     "keyword": {
                         "type": "string",
-                        "description": "可选。按标题、主办方或标签过滤，例如 助老、环保",
+                        "description": "可选。按标题、主办方或标签过滤，例如 科普、助老、环保",
                     },
                 },
             },
@@ -979,6 +1194,19 @@ GLOBAL_CSS = """
     display: inline-block; font-size: 11px; color: #2C7A7B; background: #E6FFFA;
     border-radius: 99px; padding: 1px 9px; margin-right: 5px;
   }
+  .act-region {
+    display: inline-block; font-size: 10.5px; font-weight: 800; color: #B7791F;
+    background: #FEFCBF; border-radius: 4px; padding: 1px 6px;
+  }
+  .act-hint { font-size: 11.5px; color: #A0AEC0; margin-top: 6px; }
+  .det-box { background: #F7FAFC; border: 1px solid #E6ECF3; border-radius: 10px; padding: 10px 14px; }
+  .det-row { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #E6ECF3; font-size: 12.5px; }
+  .det-row:last-child { border-bottom: none; }
+  .det-k {
+    flex: none; width: 62px; font-weight: 800; color: #2B6CB0;
+    letter-spacing: .5px; font-size: 12px;
+  }
+  .det-v { color: #4A5568; line-height: 1.6; }
 </style>
 """
 
@@ -1146,11 +1374,14 @@ def render_school_bind():
         st.rerun()
 
     if cur:
+        addr = cur.get("地址", "")
         st.markdown(
             f'<div class="school-chip">✅ {cur["名称"]}'
-            f'<span>{cur["城市"]} · {cur["校区"]} · {cur["lat"]:.3f}, {cur["lng"]:.3f}</span></div>',
+            f'<span>{cur["城市"]} · {cur["校区"]}{" · " + addr if addr else ""} · {cur["lat"]:.3f}, {cur["lng"]:.3f}</span></div>',
             unsafe_allow_html=True,
         )
+        if cur.get("官网"):
+            st.caption(f"学校官网：{cur['官网']}")
     else:
         st.caption("⚠️ 未绑定：校内活动与校外推送不可用")
 
@@ -1164,7 +1395,7 @@ def render_school_strip():
             <div class="school-strip unbound">
               <div class="ss-left">
                 <span class="ss-label">未绑定学校</span>
-                <span class="ss-name">绑定后可查看校内实时活动与校园周边推送</span>
+                <span class="ss-name">绑定后可查看校内实时活动与上海全市校外推送</span>
                 <span class="ss-sub">入口：左侧边栏「学校绑定」→ 选择学校 → 点击「绑定 / 切换」</span>
               </div>
             </div>
@@ -1180,23 +1411,61 @@ def render_school_strip():
         for a in st.session_state.activities_off
     ]
     near = f"{min(dists):.1f} km" if dists else "—"
+    areas = len({a.get("区域") for a in st.session_state.activities_off if a.get("区域")})
     st.markdown(
         f"""
         <div class="school-strip">
           <div class="ss-left">
             <span class="ss-label">已绑定学校</span>
             <span class="ss-name">{cur["名称"]}</span>
-            <span class="ss-sub">{cur["城市"]} · {cur["校区"]} · 坐标 {cur["lat"]:.4f}, {cur["lng"]:.4f}</span>
+            <span class="ss-sub">{cur["城市"]} · {cur["校区"]} · {cur.get("地址", "")} · 坐标 {cur["lat"]:.4f}, {cur["lng"]:.4f}</span>
           </div>
           <div class="ss-right">
             <div><b>{on_n}</b><span>校内活动</span></div>
-            <div><b>{off_n}</b><span>校外推送</span></div>
+            <div><b>{off_n}</b><span>上海全市校外</span></div>
+            <div><b>{areas}</b><span>覆盖区数</span></div>
             <div><b>{near}</b><span>最近校外活动</span></div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_activity_detail(a: dict, kind: str, dist: float = None):
+    """活动详情（展开后显示）+ 报名链接"""
+    d = a.get("详情", {}) or {}
+    region = a.get("区域", "")
+    rows = [
+        ("活动介绍", d.get("介绍", "主办方暂未提供详细介绍，可点击下方链接查看官方发布。")),
+        ("招募对象", d.get("招募对象", "以主办方公告为准")),
+        ("集合信息", d.get("集合", (a.get("地点") or a.get("地址", "")) )),
+        ("联系人", d.get("联系人", "见报名页面")),
+        ("注意事项", d.get("注意", "请遵守主办方现场安排")),
+    ]
+    body = "".join(
+        f'<div class="det-row"><span class="det-k">{k}</span><span class="det-v">{v}</span></div>'
+        for k, v in rows
+    )
+    meta = f'{a["日期"]}　{a["时间段"]}　{a["时长"]:g} 小时'
+    if dist is not None:
+        meta += f'　·　距校区 {dist:.1f} km　·　{region}'
+    st.markdown(
+        f'<div class="det-box">'
+        f'<div class="det-row"><span class="det-k">时间地点</span>'
+        f'<span class="det-v"><b>{meta}</b><br>{a.get("地址") or a.get("地点", "")}</span></div>'
+        f'{body}</div>',
+        unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns([1.1, 2])
+    with c1:
+        st.link_button("🔗 前往官方平台报名", a.get("报名链接", LINK_SH_VOL), use_container_width=True)
+    with c2:
+        st.caption(
+            f"报名入口：{a.get('报名链接', LINK_SH_VOL)}　"
+            "（名额与时长以主办方确认为准；未满员时点击链接即可进入官方报名页）"
+        )
 
 
 def render_activity_card(a: dict, kind: str, dist: float = None):
@@ -1210,11 +1479,14 @@ def render_activity_card(a: dict, kind: str, dist: float = None):
     dist_html = f'<span class="act-dist">📍 距校区 {dist:.1f} km</span>' if dist is not None else ""
     new_html = '<span class="badge-new">NEW</span>' if is_new else ""
     full_html = '<span class="badge-full">已满</span>' if left == 0 else ""
+    region_html = (
+        f'<span class="act-region">{a["区域"]}</span>' if kind == "off" and a.get("区域") else ""
+    )
     st.markdown(
         f"""
         <div class="act-card {kind}">
           <div class="act-head">
-            <span class="act-title">{a["标题"]}</span>{new_html}{full_html}
+            <span class="act-title">{a["标题"]}</span>{new_html}{full_html}{region_html}
             <span class="act-hours">{a["时长"]:g} h</span>
           </div>
           <div class="act-meta">{a["主办"]} · {place_label}：{place}</div>
@@ -1226,15 +1498,19 @@ def render_activity_card(a: dict, kind: str, dist: float = None):
           </div>
           <div class="act-bar"><i style="width:{pct}%"></i></div>
           <div class="act-tags">{tags}</div>
+          <div class="act-hint">👇 展开下方「活动详情与报名」可查看介绍、集合地点、联系人，并跳转官方报名入口</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    with st.expander(f"📄 活动详情与报名 · {a['标题']}", expanded=False):
+        render_activity_detail(a, kind, dist)
+
 
 def render_activities():
-    """活动中心：校内实时活动 + 校外按距离推送"""
-    _panel_title("🏫", "#0D9488", "志愿活动中心", "校内实时更新 · 校外按距离推送")
+    """活动中心：校内实时活动 + 上海全市校外推送（含详情与报名链接）"""
+    _panel_title("🏫", "#0D9488", "志愿活动中心", "校内实时更新 · 上海全市校外推送 · 详情可展开 · 一键报名")
     cur = st.session_state.get("bound_school")
     if not cur:
         st.markdown(
@@ -1264,33 +1540,70 @@ def render_activities():
     on_tab, off_tab = st.tabs(
         [
             f"🏫 校内活动（{len(st.session_state.activities_on)}）",
-            f"📍 校外推送（{len(st.session_state.activities_off)}）",
+            f"🌆 上海全市校外（{len(st.session_state.activities_off)}）",
         ]
     )
     with on_tab:
-        for a in sorted(st.session_state.activities_on, key=lambda x: x["日期"]):
+        kw_on = st.text_input(
+            "校内活动搜索", value="", key="act_kw_on",
+            placeholder="输入关键字过滤，如 图书馆 / 运动会 / 环保",
+        ).strip()
+        items = sorted(st.session_state.activities_on, key=lambda x: x["日期"])
+        if kw_on:
+            items = [
+                a for a in items
+                if kw_on in (a["标题"] + a["主办"] + "".join(a.get("标签", [])))
+            ]
+            st.caption(f"匹配「{kw_on}」的校内活动 {len(items)} 个")
+        if not items:
+            st.markdown(
+                '<div class="empty-box"><span class="big">🏫</span>'
+                "没有匹配的校内活动<br>换个关键字试试</div>",
+                unsafe_allow_html=True,
+            )
+        for a in items:
             render_activity_card(a, "on")
     with off_tab:
-        radius = st.slider(
-            "推送半径（公里）", min_value=1.0, max_value=15.0,
-            value=float(st.session_state.push_radius), step=0.5,
-            key="radius_slider",
+        c1, c2 = st.columns([1, 1.6])
+        areas = ["全部区域"] + [
+            d for d in SHANGHAI_DISTRICTS
+            if any(a.get("区域") == d for a in st.session_state.activities_off)
+        ]
+        cur_area = st.session_state.get("push_district", "全部区域")
+        area = c1.selectbox(
+            "区域筛选（上海全市）", areas,
+            index=areas.index(cur_area) if cur_area in areas else 0,
+            key="area_picker",
         )
-        st.session_state.push_radius = radius
+        st.session_state.push_district = area
+        kw = c2.text_input(
+            "校外活动搜索", value=st.session_state.get("push_keyword", ""),
+            key="act_kw_off", placeholder="输入关键字过滤，如 科普 / 助老 / 环保",
+        ).strip()
+        st.session_state.push_keyword = kw
+
         rows = []
         for a in st.session_state.activities_off:
-            d = haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"])
-            if d <= radius:
-                rows.append((d, a))
+            if area != "全部区域" and a.get("区域") != area:
+                continue
+            if kw and kw not in (a["标题"] + a["主办"] + "".join(a.get("标签", []))):
+                continue
+            rows.append((haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"]), a))
         rows.sort(key=lambda x: x[0])
+
         if not rows:
             st.markdown(
-                '<div class="empty-box"><span class="big">📍</span>'
-                "该半径内暂无校外活动<br>可适当调大半径</div>",
+                '<div class="empty-box"><span class="big">🌆</span>'
+                "当前筛选条件下没有校外活动<br>可切换为「全部区域」或清空关键字</div>",
                 unsafe_allow_html=True,
             )
         else:
-            st.caption(f"半径 {radius:.1f} km 内共 {len(rows)} 个活动，按距离由近到远排列")
+            cover = len({a.get("区域") for _, a in rows})
+            farthest = rows[-1][0]
+            st.caption(
+                f"{area}　共 {len(rows)} 个活动，覆盖 {cover} 个区，"
+                f"距校区 {rows[0][0]:.1f} ~ {farthest:.1f} km，按距离由近到远排列"
+            )
         for d, a in rows:
             render_activity_card(a, "off", d)
 

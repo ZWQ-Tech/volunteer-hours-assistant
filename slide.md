@@ -36,7 +36,7 @@ style: |
 
 ### Streamlit × 通义千问 Tool Calling
 
-用一句话完成「查询 · 统计 · 导出报表」，并推送身边的志愿活动
+用一句话完成「查询 · 统计 · 导出报表」，并推送上海全市的志愿活动
 
 **姓名 / 学号**：张三 2023001 · 李四 2023002
 **课程**：《开源AI技术实践》期末汇报 · 路径 B
@@ -68,7 +68,7 @@ style: |
 | 导出报表 | 写 xlsx 并挂到页面 | 志愿时长汇总_日期_时分.xlsx |
 
 **链路一 · 时长统计**：查询 → 统计 → 导出，一句话串起三个工具
-**链路二 · 活动发现**：绑定学校 → `query_open_activities` 一次调用返回结果，校内看实时刷新、校外按距离排队
+**链路二 · 活动发现**：绑定学校 → `query_open_activities` 一次调用返回结果，校内看实时刷新、上海全市校外按距离排队并可点开报名
 
 **范围界定**：面向校团委与院系志愿负责人，单机运行，两个链路的业务数据均为课程自建模拟数据。
 
@@ -107,7 +107,7 @@ E 数据层   内存数据表（10 条记录）+ 学校与活动池 + 最近结�
 | 09 | 模型生成 | 中文结论，本轮结束 |
 
 > 全流程约 3 次模型请求；限流或超时自动退避重试，失败可一键重发。
-> 若问的是活动（如"附近 3 公里有环保活动吗"），走单轮分支：直接调用 `query_open_activities` 并返回距离排序结果。
+> 若问的是活动（如"浦东新区有什么科普活动"），走单轮分支：直接调用 `query_open_activities` 并按距离返回。
 
 ---
 
@@ -118,12 +118,12 @@ E 数据层   内存数据表（10 条记录）+ 学校与活动池 + 最近结�
 | `query_volunteer_data` | `start_date` 必填 · `end_date` 必填 · `project_name` 可选 | `{status, count, message, records[]}` |
 | `calc_total_hours` | `records` 可选（省略取最近查询结果） | `{status, summary[{姓名,总时长,参与次数}], 总计}` |
 | `export_volunteer_excel` | `summary` 可选（省略取最近统计结果） | `{status, filename, message}` |
-| `query_open_activities` | `scope`（all/on_campus/off_campus）· `radius_km` · `keyword`，全可选 | `{status, school, on_campus[], off_campus[]}` |
+| `query_open_activities` | `scope`（all/on_campus/off_campus）· `district`（上海各区，不传=全市）· `keyword`，全可选 | `{status, school, area, on_campus[], off_campus[]}` |
 
 **取舍一 · 可选参数**：用户不必说全条件，模型可采用默认行为
 **取舍二 · 数据不回传**：省略数组参数，避免长 JSON 被截断导致 400
 **取舍三 · 状态三值**：`success / empty / error` 分别对应结果、提示、修正建议
-**取舍四 · 距离不由模型算**：半径与排序交给 Haversine 公式，防止模型编造距离
+**取舍四 · 距离不由模型算**：距离排序交给 Haversine 公式，区域由参数限定，防止模型编造
 
 ---
 
@@ -134,7 +134,7 @@ E 数据层   内存数据表（10 条记录）+ 学校与活动池 + 最近结�
 - 左：对话区（用户提问高亮编号，助手回答卡片）
 - 右上：工具调用日志（工具名 + 入参 + 状态 + 结果摘要）
 - 右下：结果明细表格 · 柱状图 · 导出下载按钮
-- 底部：活动中心（校内 / 校外两页签，校外按距离升序，可调推送半径）
+- 底部：活动中心（校内 / 上海全市校外两页签，可筛区、可搜索，卡片可展开看详情并跳转报名）
 
 **实际运行记录**
 
@@ -142,7 +142,7 @@ E 数据层   内存数据表（10 条记录）+ 学校与活动池 + 最近结�
 query_volunteer_data    成功  入参 2026-09-01 ~ 2026-10-31  结果 共 10 条记录
 calc_total_hours        成功  入参（省略 records）          结果 4 人 · 39.0 小时
 export_volunteer_excel  成功  结果 志愿时长汇总_215814.xlsx
-query_open_activities   成功  入参 scope=off_campus, radius_km=5  结果 4 项，最近 0.3 km
+query_open_activities   成功  入参 scope=off_campus, district=浦东新区  结果 4 项，最近 2.4 km
 ```
 
 <!-- 此处放实际界面截图 -->
