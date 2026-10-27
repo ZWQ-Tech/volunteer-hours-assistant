@@ -17,7 +17,7 @@ style: |
 
 「帮我统计 10 月每个人的志愿时长，导个表」
 
-**姓名 / 学号**：张皖晴 · f25016517
+**姓名 / 学号**：张皖晴 · f25016517　|　韩思琰 · f25016504
 **课程**：《开源AI技术实践》期末汇报 · 路径 B
 **仓库**：github.com/ZWQ-Tech/volunteer-hours-assistant
 
@@ -56,9 +56,9 @@ style: |
 
 ---
 
-# 给项目做了 6 个工具，覆盖两条业务线
+# 给项目做了 8 个工具，覆盖三条业务线
 
-前 4 个管"时长账"，后 2 个管"找活动"
+前 4 个管"时长账"，第 5、6 个管"找活动"，最后 2 个管"院级汇总"
 
 | 工具 | 干什么 |
 |---|---|
@@ -68,8 +68,30 @@ style: |
 | `export_volunteer_excel` | 生成 xlsx 挂到页面，一键下载 |
 | `query_open_activities` | 按省市区查活动，带距离和报名链接 |
 | `add_volunteer_record` | 说一句"我干了 3 小时"就能记进去 |
+| `import_volunteer_excel` | 负责人上传汇总 Excel，时长自动加到各同学名下 |
+| `dept_summary` | 全员统计：人数、总时长、分项、排名一次给齐 |
 
 **共同原则：能让工具算的，绝不让模型算；姓名学号不进参数。**
+
+---
+
+# Agent 怎么把一句话变成三个数字
+
+```python
+def calc_hours_by_type(scope="me", start_date=None, end_date=None):
+    df = pick_df(scope)                       # 取"本人"或"全员"的真实记录
+    df = filter_by_date(df, start_date, end_date)
+    on  = df[df["类型"] == "校内"]["时长(小时)"].sum()
+    off = df[df["类型"] == "校外"]["时长(小时)"].sum()
+    total = on + off
+    return {"status": "success",
+            "校内(小时)": round(on, 1), "校外(小时)": round(off, 1),
+            "总计(小时)": round(total, 1),
+            "占比": {"校内": on/total*100, "校外": off/total*100}}
+```
+
+> 模型念的是工具返回的 JSON："校内 12.5，校外 3，总计 15.5"。
+> 它不参与加减乘除——这就是 Tool Calling 的核心。
 
 ---
 

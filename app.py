@@ -70,6 +70,9 @@ SYSTEM_PROMPT = (
     "当用户要登记自己新参加的志愿活动（如'帮我记一笔：社区清洁 3 小时'）时，调用 add_volunteer_record；"
     "如果用户说明了是校内还是校外活动，把 kind 传成「校内」或「校外」，没说就省略让工具自动判断；"
     "姓名与学号由绑定的个人账号自动带入，不要向用户索要姓名学号；缺少活动名称或时长时先追问。"
+    "当用户（院志愿汇总负责人）说“导入汇总表/把表格里的时长加给各同学/批量录入”时，调用 import_volunteer_excel，"
+    "rows 参数一般省略（工具自动使用页面上传并解析好的数据）；"
+    "当用户要“全员统计/全院汇总/给大家排名”时，调用 dept_summary，一次给出人数、总时长、分项与排名。"
     "若工具返回未绑定账号或未绑定学校，请提示用户在左侧对应面板绑定。"
     "回答请简洁、使用中文。"
 )
@@ -279,6 +282,11 @@ def init_state():
         st.session_state.show_my_records = False
     if "detail_kind" not in st.session_state:
         st.session_state.detail_kind = "全部"     # 明细面板口径：全部 / 校内 / 校外
+    # —— 院志愿汇总（负责人批量导入）——
+    if "extra_accounts" not in st.session_state:
+        st.session_state.extra_accounts = []     # 批量导入时自动登记的新账号
+    if "import_preview" not in st.session_state:
+        st.session_state.import_preview = None   # (文件名, rows, 警告列表) 待确认的导入预览
 
 
 def migrate_df(df):
@@ -889,6 +897,168 @@ def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
     }
 
 
+def _ensure_account(name: str, sid: str = "") -> dict:
+    """批量导入时按 姓名+学号 匹配账号；匹配不到就自动登记一个新账号。
+    返回 (账号 dict, 是否新建)。新账号存入 session 的 extra_accounts，侧栏可选择。"""
+    if "extra_accounts" not in st.session_state:
+        st.session_state.extra_accounts = []
+    pool = list(DEMO_ACCOUNTS) + list(st.session_state.extra_accounts)
+    acc = st.session_state.get("bound_account")
+    if acc:
+        pool.append(acc)
+    # ① 姓名 + 学号 双匹配（最可信）
+    if sid:
+        for a in pool:
+            if a["姓名"] == name and str(a["学号"]) == str(sid):
+                return a, False
+    # ② 仅姓名匹配（学号不一致时以表内学号为准更新展示，但不再新建）
+    for a in pool:
+        if a["姓名"] == name:
+            return a, False
+    # ③ 都没有 → 自动登记
+    new_acc = {"姓名": name, "学号": str(sid or ""), "学院": "", "专业": ""}
+    st.session_state.extra_accounts.append(new_acc)
+    return new_acc, True
+
+
+def import_volunteer_excel(rows: list) -> dict:
+    """工具7：院志愿汇总负责人批量导入。把 Excel 汇总表里的志愿记录逐条加到各同学名下。
+    rows 每行至少要有：姓名、志愿项目、日期、时长(小时)；学号 / 类型 / 地点 / 备注 可选。
+    匹配不到账号的同学会自动登记新账号；重复记录（同姓名+项目+日期）自动跳过。"""
+    if not isinstance(rows, list) or not rows:
+        return {"status": "error",
+                "message": "没有读到可导入的数据行。请确认上传的是按模板填写的 Excel（含 姓名/志愿项目/日期/时长(小时) 列）。"}
+
+    df = st.session_state.volunteer_df
+    imported, skipped, created = [], [], []
+    per_person = {}
+    for i, raw in enumerate(rows, 1):
+        row = raw if isinstance(raw, dict) else {}
+        name = str(row.get("姓名") or row.get("name") or "").strip()
+        proj = str(row.get("志愿项目") or row.get("项目") or row.get("project_name") or "").strip()
+        date_txt = str(row.get("日期") or row.get("date") or "").strip()
+        hours_raw = row.get("时长(小时)", row.get("时长", row.get("hours")))
+        if not name or not proj:
+            skipped.append({"行": i, "原因": "缺少姓名或志愿项目"})
+            continue
+        d = _parse_date(date_txt)
+        if d is None:
+            skipped.append({"行": i, "姓名": name, "原因": f"日期「{date_txt}」格式不正确"})
+            continue
+        if d > datetime.now().date():
+            skipped.append({"行": i, "姓名": name, "原因": f"服务日期 {d:%Y-%m-%d} 还没到"})
+            continue
+        try:
+            h = float(hours_raw)
+        except (TypeError, ValueError):
+            skipped.append({"行": i, "姓名": name, "原因": f"时长「{hours_raw}」不是数字"})
+            continue
+        if h <= 0 or h > 24:
+            skipped.append({"行": i, "姓名": name, "原因": f"时长 {h:g} 超出 0~24 小时范围"})
+            continue
+        h = round(h * 2) / 2
+        date_str = d.strftime("%Y-%m-%d")
+
+        dup = df[(df["姓名"] == name) & (df["志愿项目"] == proj) & (df["日期"] == date_str)]
+        if not dup.empty:
+            skipped.append({"行": i, "姓名": name,
+                            "原因": f"「{proj}」{date_str} 已有记录（{dup.iloc[0]['时长(小时)']:g}h）"})
+            continue
+
+        acc, is_new = _ensure_account(name, str(row.get("学号") or row.get("学 号") or "").strip())
+        if is_new:
+            created.append(f"{name}({acc['学号'] or '学号待补'})")
+
+        kind_raw = str(row.get("类型") or row.get("kind") or "").strip()
+        place = str(row.get("地点") or row.get("place") or "").strip()
+        note = str(row.get("备注") or row.get("note") or "").strip()
+        if kind_raw in (KIND_ON, "on", "on_campus", "校内活动"):
+            kind_val = KIND_ON
+        elif kind_raw in (KIND_OFF, "off", "off_campus", "校外活动"):
+            kind_val = KIND_OFF
+        else:
+            blob = proj + place
+            on_words = ("图书馆", "迎新", "运动会", "校园", "校内", "实验室", "校运会", "宿舍", "教学楼")
+            kind_val = KIND_ON if any(w in blob for w in on_words) else KIND_OFF
+
+        new_row = {
+            "姓名": acc["姓名"], "学号": acc["学号"] or str(row.get("学号") or ""),
+            "志愿项目": proj, "类型": kind_val, "日期": date_str,
+            "时长(小时)": h, "地点": place, "备注": note,
+        }
+        df = pd.concat([df, pd.DataFrame([new_row], columns=RECORD_COLUMNS)], ignore_index=True)
+        imported.append(new_row)
+        stat = per_person.setdefault(acc["姓名"], {"姓名": acc["姓名"], "新增(小时)": 0.0, "新增条数": 0})
+        stat["新增(小时)"] += h
+        stat["新增条数"] += 1
+
+    if imported:
+        st.session_state.volunteer_df = df
+        # 数据变了：清掉过期缓存
+        st.session_state.last_records = None
+        st.session_state.last_summary = None
+        st.session_state.last_owner = ""
+        st.session_state.excel_file = None
+
+    per_list = sorted(per_person.values(), key=lambda x: -x["新增(小时)"])
+    for p in per_list:
+        p["新增(小时)"] = round(p["新增(小时)"], 1)
+    total_add = round(sum(p["新增(小时)"] for p in per_list), 1)
+    msg = (f"导入完成：成功写入 {len(imported)} 条、合计 {total_add:g} 小时，涉及 {len(per_list)} 名同学"
+           + (f"，自动登记新账号 {len(created)} 个" if created else "")
+           + (f"；跳过 {len(skipped)} 条（重复或填写有误）" if skipped else "。"))
+    return {
+        "status": "success" if imported else "error",
+        "imported": len(imported),
+        "skipped": len(skipped),
+        "total_hours": total_add,
+        "per_person": per_list,
+        "created_accounts": created,
+        "skip_details": skipped[:20],
+        "message": msg if imported else
+                   f"没有一条导入成功。共 {len(skipped)} 条被跳过，例如：{skipped[0]['原因'] if skipped else '无数据'}。",
+    }
+
+
+def dept_summary() -> dict:
+    """工具8：院级全员统计。一次给出全院总时长、总人次、参与人数、校内/校外分项与按人排名。"""
+    df = st.session_state.volunteer_df
+    if df.empty:
+        return {"status": "empty", "message": "目前没有任何志愿记录，无法做全员统计。"}
+    hours = pd.to_numeric(df["时长(小时)"], errors="coerce").fillna(0)
+    total = float(hours.sum())
+    on_h = float(hours[df["类型"] == KIND_ON].sum())
+    off_h = float(hours[df["类型"] != KIND_ON].sum())
+    g = df.assign(_h=hours).groupby("姓名").agg(
+        总时长小时=("_h", "sum"), 校内小时=("_h", lambda s: float(s[df.loc[s.index, "类型"] == KIND_ON].sum())),
+        次数=("_h", "count"))
+    ranking = [
+        {"姓名": n, "总时长(小时)": round(r["总时长小时"], 1),
+         "校内(小时)": round(r["校内小时"], 1), "校外(小时)": round(r["总时长小时"] - r["校内小时"], 1),
+         "参与次数": int(r["次数"])}
+        for n, r in g.sort_values("总时长小时", ascending=False).iterrows()
+    ]
+    # 顺手把结果挂到会话里：主面板的表格和柱状图直接复用
+    st.session_state.last_records = df[RECORD_COLUMNS].to_dict("records")
+    st.session_state.last_summary = [{"姓名": r["姓名"], "总时长(小时)": r["总时长(小时)"],
+                                      "校内(小时)": r["校内(小时)"], "校外(小时)": r["校外(小时)"],
+                                      "参与次数": r["参与次数"]} for r in ranking]
+    st.session_state.last_owner = "全员"
+    return {
+        "status": "success",
+        "参与人数": int(df["姓名"].nunique()),
+        "总记录数": int(len(df)),
+        "总时长(小时)": round(total, 1),
+        "校内(小时)": round(on_h, 1),
+        "校外(小时)": round(off_h, 1),
+        "人均时长(小时)": round(total / max(1, int(df["姓名"].nunique())), 1),
+        "排名": ranking,
+        "message": (f"全院共 {df['姓名'].nunique()} 人参与志愿，累计 {total:.1f} 小时"
+                    f"（校内 {on_h:g} + 校外 {off_h:g}），人均 {total / max(1, int(df['姓名'].nunique())):.1f} 小时。"
+                    f"排名已同步到主面板的表格与柱状图。"),
+    }
+
+
 TOOL_IMPL = {
     "query_volunteer_data": query_volunteer_data,
     "calc_total_hours": calc_total_hours,
@@ -896,6 +1066,8 @@ TOOL_IMPL = {
     "export_volunteer_excel": export_volunteer_excel,
     "query_open_activities": query_open_activities,
     "add_volunteer_record": add_volunteer_record,
+    "import_volunteer_excel": lambda rows: import_volunteer_excel(rows),
+    "dept_summary": dept_summary,
 }
 
 # 工具 Schema：交给通义千问，由模型自主决定何时调用（真实 Tool Calling）
@@ -1048,6 +1220,31 @@ TOOLS_SCHEMA = [
                 },
                 "required": ["project_name", "hours"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_volunteer_excel",
+            "description": "院志愿汇总负责人专用：把志愿时长汇总 Excel 里的记录批量导入，直接给各同学加时长。用户说“导入汇总表/把表格里的时长加上/批量录入”时调用；rows 来自页面上传并解析好的数据，一般不需要模型自己构造。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rows": {
+                        "type": "array",
+                        "description": "可选。待导入的记录数组（每行含 姓名/志愿项目/日期/时长(小时)，学号/类型/地点/备注可选）；省略时自动使用页面上传并解析好的数据",
+                        "items": {"type": "object"},
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dept_summary",
+            "description": "院级全员统计：一次给出全院参与人数、总记录数、总时长、校内/校外分项、人均时长与按人排名，并把排名同步到主面板。用户问“全员统计一下/全院志愿情况/给大家汇总个排名”时调用。",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]
@@ -2053,7 +2250,8 @@ def render_account_bind():
     """侧栏：绑定 / 切换 / 新建 / 退出个人账号"""
     st.markdown("**👤 个人账号**")
     acc = st.session_state.get("bound_account")
-    names = [a["姓名"] for a in DEMO_ACCOUNTS]
+    extras = st.session_state.get("extra_accounts") or []
+    names = [a["姓名"] for a in DEMO_ACCOUNTS] + [a["姓名"] for a in extras]
     options = list(names)
     if acc and acc["姓名"] not in names:
         options.append(f"{acc['姓名']}（我的账号）")
@@ -2536,6 +2734,144 @@ def render_activities():
 
 
 
+def _excel_template_bytes() -> bytes:
+    """生成院级汇总模板 xlsx（表头 + 两行示例），供负责人下载填写"""
+    from io import BytesIO
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "志愿时长汇总"
+    headers = ["姓名", "学号", "志愿项目", "日期", "时长(小时)", "类型", "地点", "备注"]
+    ws.append(headers)
+    ws.append(["陈小明", "2024010234", "图书馆书库整理", "2026-10-20", 3, "校内", "校图书馆三楼", "院青志队组织"])
+    ws.append(["陈小明", "2024010234", "社区敬老院陪伴", "2026-10-22", 2.5, "校外", "阳光敬老院", ""])
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _parse_upload(file) -> tuple:
+    """把上传的 Excel / CSV 解析成待导入 rows，并做列名校验与归一化。
+    返回 (rows, warnings)；列名不合规时返回 ([], [错误提示])"""
+    import io as _io
+    name = file.name.lower()
+    try:
+        if name.endswith(".csv"):
+            raw = file.getvalue()
+            df_up = None
+            for enc in ("utf-8-sig", "utf-8", "gbk"):
+                try:
+                    df_up = pd.read_csv(_io.BytesIO(raw), encoding=enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if df_up is None:
+                return [], ["CSV 编码无法识别，请另存为 UTF-8 或 xlsx 后重试。"]
+        else:
+            df_up = pd.read_excel(_io.BytesIO(file.getvalue()))
+    except Exception as e:
+        return [], [f"文件读取失败：{type(e).__name__}: {str(e)[:120]}"]
+
+    df_up = df_up.dropna(how="all")
+    if df_up.empty:
+        return [], ["表格里没有数据行。"]
+
+    # 列名归一化（兼容常见写法）
+    alias = {
+        "姓名": ["姓名", "名字", "同学", "name"],
+        "学号": ["学号", "学 号", "sid", "student_id"],
+        "志愿项目": ["志愿项目", "项目", "活动", "活动名称", "志愿活动", "project"],
+        "日期": ["日期", "服务日期", "date"],
+        "时长(小时)": ["时长(小时)", "时长", "时长（小时）", "小时", "hours", "志愿时长"],
+        "类型": ["类型", "类别", "校内/校外", "kind"],
+        "地点": ["地点", "服务地点", "位置", "place"],
+        "备注": ["备注", "说明", "note"],
+    }
+    col_map = {}
+    for std, alts in alias.items():
+        for c in df_up.columns:
+            cs = str(c).strip()
+            if cs in alts and std not in col_map.values():
+                col_map[c] = std
+                break
+    df_up = df_up.rename(columns=col_map)
+    missing = [c for c in ("姓名", "志愿项目", "日期", "时长(小时)") if c not in df_up.columns]
+    if missing:
+        return [], [f"缺少必需列：{'、'.join(missing)}。请按模板填写（可点「下载模板」）。"]
+
+    rows, warns = [], []
+    for i, r in df_up.iterrows():
+        if pd.isna(r.get("姓名")) or pd.isna(r.get("志愿项目")):
+            continue
+        d = r.get("日期")
+        if hasattr(d, "strftime"):
+            d = d.strftime("%Y-%m-%d")
+        elif d is not None and not isinstance(d, str):
+            d = str(d)
+        row = {
+            "姓名": str(r["姓名"]).strip(),
+            "学号": "" if pd.isna(r.get("学号")) else str(r["学号"]).strip().rstrip(".0"),
+            "志愿项目": str(r["志愿项目"]).strip(),
+            "日期": "" if d is None or (isinstance(d, float) and pd.isna(d)) else str(d).strip(),
+            "时长(小时)": r.get("时长(小时)"),
+            "类型": "" if pd.isna(r.get("类型")) else str(r["类型"]).strip(),
+            "地点": "" if pd.isna(r.get("地点")) else str(r["地点"]).strip(),
+            "备注": "" if pd.isna(r.get("备注")) else str(r["备注"]).strip(),
+        }
+        if row["学号"].endswith(".0"):
+            row["学号"] = row["学号"][:-2]
+        rows.append(row)
+    if not rows:
+        warns.append("没有读到有效数据行（姓名或项目为空的行已忽略）。")
+    return rows, warns
+
+
+def render_dept_panel():
+    """侧栏：院志愿汇总负责人面板——上传 Excel 批量加时长 + 全员统计"""
+    st.markdown("**🏫 院志愿汇总（负责人）**")
+    with st.expander("📥 批量导入志愿时长", expanded=False):
+        st.caption("下载模板 → 负责人填写各同学的志愿记录 → 上传 → 确认导入，时长自动加到各同学名下。")
+        tpl = _excel_template_bytes()
+        st.download_button("⬇️ 下载填写模板", data=tpl,
+                           file_name="志愿时长汇总模板.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True, key="dept_tpl_btn")
+        up = st.file_uploader("上传汇总表（xlsx / csv）", type=["xlsx", "csv"], key="dept_upload")
+        if up is not None:
+            rows, warns = _parse_upload(up)
+            for w in warns:
+                st.warning(w)
+            if rows:
+                st.session_state.import_preview = (up.name, rows, warns)
+        preview = st.session_state.get("import_preview")
+        if preview:
+            fname, prows, _ = preview
+            st.caption(f"已解析 **{fname}**：{len(prows)} 行待导入。前 5 行预览：")
+            st.dataframe(pd.DataFrame(prows[:5]), use_container_width=True, height=150)
+            if st.button("✔️ 确认导入并加时长", use_container_width=True, key="dept_import_btn",
+                         type="primary"):
+                res = import_volunteer_excel(prows)
+                add_log("import_volunteer_excel", {"rows": f"{len(prows)} 行（{fname}）"}, res)
+                st.session_state.import_preview = None
+                st.session_state.toast = (
+                    "success" if res.get("status") == "success" else "error",
+                    res.get("message", ""),
+                )
+                st.rerun()
+        else:
+            st.caption("尚未上传文件。")
+
+    if st.button("📊 全员统计（院级汇总）", use_container_width=True, key="dept_summary_btn"):
+        res = dept_summary()
+        add_log("dept_summary", {}, res)
+        st.session_state.toast = (
+            "success" if res.get("status") == "success" else "error",
+            res.get("message", ""),
+        )
+        st.rerun()
+    st.caption("也可直接对助手说「全员统计一下」或「把汇总表导入」，由模型调用同样两个工具完成。")
+
+
 def render_sidebar():
     with st.sidebar:
         st.markdown(
@@ -2608,6 +2944,9 @@ def render_sidebar():
                 )
                 st.rerun()
 
+        # ---- 院志愿汇总（负责人批量导入 + 全员统计） ----
+        render_dept_panel()
+
         # ---- 工具栏 ----
         st.markdown("**🧹 会话管理**")
         c1, c2 = st.columns(2)
@@ -2626,6 +2965,8 @@ def render_sidebar():
             st.session_state.last_records = None
             st.session_state.last_owner = ""
             st.session_state.excel_file = None
+            st.session_state.extra_accounts = []
+            st.session_state.import_preview = None
             st.session_state.toast = ("success", "已重置为初始模拟数据。")
             st.rerun()
 
