@@ -270,10 +270,12 @@ volunteer-hours-assistant/
 ├── .gitignore          # 排除 .venv/__pycache__/.env/数据文件等
 ├── .streamlit/
 │   └── config.toml     # 浅色主题与服务配置
-├── slide.html          # 汇报幻灯片（双击即可用浏览器打开，零外部依赖）
-├── slide.md            # 同内容 Marp 源文件，可再导出 PDF
+├── slide.html          # 汇报幻灯片 · 精简版 11 页（双击浏览器打开）
+├── slide_full.html     # 详版 15 页（含代码页 / 技术栈对比，备用）
+├── slide.md            # 精简版 Marp 源文件，可再导出 PDF
+├── 演讲稿.md            # 按 11 页逐页对应的答辩讲稿（含 Q&A 十问）
 ├── 使用说明.txt         # 面向使用者的四步操作说明
 └── README.md           # 本文档
 ```
 
-> 汇报时直接双击 `slide.html`，用 ← → 或空格翻页，按 P 可打印导出 PDF。
+> 汇报用精简版 `slide.html`（11 页，每页一个重点），放映时按 B 显示 / 隐藏讲者备注，按 P 打印导出 PDF（备注自动隐藏）。讲稿见 `演讲稿.md`。
