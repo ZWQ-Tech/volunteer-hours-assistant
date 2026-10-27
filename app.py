@@ -1755,7 +1755,7 @@ def my_records_df():
 
 
 def render_stats():
-    """顶部 KPI：记录总数（整卡可点开明细）+ 醒目的累计总时长 + 校内 / 校外分项。
+    """顶部 KPI：① 醒目的累计总时长 → ② 校内 → ③ 校外 → ④ 记录总数（整卡可点开明细）。
     四张卡都只跟随当前绑定账号本人的记录，录入或切换账号后同一轮渲染即更新。"""
     mine = my_records_df()
     acc = get_bound_account()
@@ -1773,31 +1773,10 @@ def render_stats():
     on_pct = (on_h / total * 100) if total else 0.0
     off_pct = 100 - on_pct if total else 0.0
 
-    c1, c2, c3, c4 = st.columns([1.0, 1.28, 1.0, 1.0], gap="small")
+    # 顺序：① 累计总时长（最醒目，占最大宽度）→ ② 校内 → ③ 校外 → ④ 记录总数
+    c1, c2, c3, c4 = st.columns([1.28, 1.0, 1.0, 1.0], gap="small")
 
     with c1:
-        rec_label = f"{acc['姓名']}的记录" if acc else "志愿记录总数"
-        rec_hint = (
-            '<div class="stat-hint">👁 点本卡查看每一项记录</div>' if acc
-            else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后显示本人记录</div>'
-        )
-        st.markdown(
-            f"""
-            <div class="stat-card rec-card">
-              <div class="stat-top">
-                <span class="stat-icon" style="background:#EBF8FF;">📋</span>
-                <span class="stat-label">{rec_label}</span>
-              </div>
-              <div class="stat-value">{n} <span class="stat-unit">条</span></div>
-              {rec_hint}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        # 透明热区按钮：让整张卡片可点击（老浏览器下退化为普通按钮，功能不受影响）
-        clicked = st.button("🔍 查看我的志愿记录明细", key="open_my_records", use_container_width=True)
-
-    with c2:
         st.markdown(
             f"""
             <div class="stat-card hero">
@@ -1818,7 +1797,7 @@ def render_stats():
             unsafe_allow_html=True,
         )
 
-    with c3:
+    with c2:
         st.markdown(
             f"""
             <div class="stat-card">
@@ -1833,7 +1812,7 @@ def render_stats():
             unsafe_allow_html=True,
         )
 
-    with c4:
+    with c3:
         st.markdown(
             f"""
             <div class="stat-card">
@@ -1847,6 +1826,28 @@ def render_stats():
             """,
             unsafe_allow_html=True,
         )
+
+    with c4:
+        rec_label = f"{acc['姓名']}的记录" if acc else "志愿记录总数"
+        rec_hint = (
+            '<div class="stat-hint">👁 点本卡查看每一项记录</div>' if acc
+            else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后显示本人记录</div>'
+        )
+        st.markdown(
+            f"""
+            <div class="stat-card rec-card">
+              <div class="stat-top">
+                <span class="stat-icon" style="background:#EBF8FF;">📋</span>
+                <span class="stat-label">{rec_label}</span>
+              </div>
+              <div class="stat-value">{n} <span class="stat-unit">条</span></div>
+              {rec_hint}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # 透明热区按钮：让整张卡片可点击（老浏览器下退化为普通按钮，功能不受影响）
+        clicked = st.button("🔍 查看我的志愿记录明细", key="open_my_records", use_container_width=True)
 
     if clicked:  # 点卡片 = 展开本人记录明细（再点一次收起）
         st.session_state.show_my_records = not st.session_state.get("show_my_records")
