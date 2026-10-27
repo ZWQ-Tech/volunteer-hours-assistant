@@ -26,3 +26,6 @@ logs/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 数据构建脚本的临时缓存
+tools/.cache/

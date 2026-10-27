@@ -3,12 +3,14 @@
 校园志愿时长汇总助手（路径B：Streamlit + 通义千问 Tool Calling）
 ====================================================================
 - 通过 OpenAI 兼容接口调用阿里云百炼 DashScope 的通义千问模型
-- 自行设计 5 个业务工具，由模型真实发起 Tool Call（非 if 关键词判断）
-  1. query_volunteer_data    按起止日期（+可选项目名）查询志愿记录
-  2. calc_total_hours        按姓名分组统计累计志愿总时长
-  3. export_volunteer_excel  导出汇总 Excel（网页内置下载按钮）
-  4. query_open_activities   查询校内活动与上海全市校外活动（含详情与报名链接）
-  5. add_volunteer_record    为已绑定的个人账号录入新的志愿活动与时长
+- 自行设计 6 个业务工具，由模型真实发起 Tool Call（非 if 关键词判断）
+  1. query_volunteer_data    按起止日期（+项目名 / 校内校外）查询志愿记录
+  2. calc_total_hours        按姓名分组统计总时长、校内时长、校外时长
+  3. calc_hours_by_type      把本人志愿时长拆成 校内 / 校外 / 总计 三个口径
+  4. export_volunteer_excel  导出汇总 Excel（网页内置下载按钮）
+  5. query_open_activities   按全国任意省 / 市 / 区县查询校内与校外活动
+  6. add_volunteer_record    为已绑定的个人账号录入新的志愿活动与时长
+- 数据层 geo.py：34 省 / 368 市 / 3078 区县 + 全国 1309 所高校（数据由公开数据集生成）
 - 加分项：个人账号绑定 / 学校绑定 / 日志分区展示 / 表单新增记录 / 强异常容错 / 自动柱状图
 运行：streamlit run app.py
 """
@@ -19,7 +21,7 @@ import json
 import os
 import time
 import traceback
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -27,6 +29,8 @@ import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
+
+import geo              # 本地数据层：省市区 / 全国高校 / 活动模板
 
 load_dotenv()
 
@@ -42,42 +46,64 @@ BASE_URL = os.getenv(
 )
 
 SYSTEM_PROMPT = (
-    "你是校园志愿服务时长管理助手。用户会用自然语言提出查询、统计、导出等需求，"
+    "你是校园志愿服务时长管理助手。用户会用自然语言提出查询、统计、导出、查找活动等需求，"
     "你必须优先调用提供的工具完成业务操作，禁止编造数据。"
     "调用工具前，先根据对话上下文把用户的相对时间（如'本月'、'上周'）换算成 YYYY-MM-DD 格式。"
     "工具返回 status 为 error 时，请把原因友好地转述给用户并给出修正建议；"
-    "返回 status 为 empty 时，提示该时间段没有查到记录。"
+    "返回 status 为 empty 时，提示该条件下没有查到数据。"
     "统计前必须先调用查询工具；导出前必须先完成统计。"
     "调用统计和导出工具时不要自己回传数据数组（省略 records / summary 参数即可），"
     "工具会自动使用最近一次查询或统计的结果。"
     "查询记录时注意口径：用户说“我/我的/本人”或没有说明范围时，scope 传 me，只查当前登录账号本人的记录；"
-    "用户明确说“每个人/全员/全班/所有同学/大家”时，scope 传 all，查询全部成员记录。"
+    "用户明确说“每个人/全员/全班/所有同学/大家”时，scope 传 all。"
     "若按本人口径查询，回答时说明“这是你本人的记录”，并提示如需全员记录可以直说。"
-    "若上一轮是按本人口径查询、本轮用户却要统计或导出全员，请先用 scope=all 重新查询一次再统计。"
-    "当用户询问最近有什么志愿活动、校内活动、校外/上海全市活动时，调用 query_open_activities；"
-    "该工具支持按 scope 区分校内/校外、按 district 限定上海某个区、按 keyword 过滤；"
-    "若该工具返回未绑定学校，请提示用户在页面左侧「学校绑定」中选择并绑定学校。"
-    "回答活动类问题时，请按日期或距离列出要点，说明主办方、时间、时长、剩余名额与所在区，"
+    "志愿记录分为「校内」与「校外」两类：用户问校内、校外分别多少小时，或问总共多少小时，"
+    "调用 calc_hours_by_type 获取校内 / 校外 / 总计三个口径；也可用 query_volunteer_data 的 kind 参数只看某一类。"
+    "当用户询问最近有什么志愿活动、校内活动、某地校外活动时，调用 query_open_activities；"
+    "该工具支持按 scope 区分校内/校外，按 province / city / district 指定全国任意省市区县"
+    "（例如用户说“成都武侯区”“南京鼓楼区”，就把地名分别填进 city 与 district），按 keyword 过滤；"
+    "用户没有说地名时不要自己填 province/city/district，工具会使用页面当前选择的地区。"
+    "回答活动类问题时，请按日期列出要点，说明主办方、时间、时长、剩余名额与所在区县；"
+    "只有工具返回的 sort_by 为 distance（说明所选地区就在校区所在城市）时，才可以说“按距校区由近到远排序”，"
+    "跨市时不要提距离。"
     "并在末尾提示用户可在活动卡片下方展开查看详情、通过报名链接前往官方平台报名。"
-    "当用户要登记自己新参加的志愿活动（如'帮我记一笔：社区清洁 3 小时'）时，调用 add_volunteer_record，"
+    "当用户要登记自己新参加的志愿活动（如'帮我记一笔：社区清洁 3 小时'）时，调用 add_volunteer_record；"
+    "如果用户说明了是校内还是校外活动，把 kind 传成「校内」或「校外」，没说就省略让工具自动判断；"
     "姓名与学号由绑定的个人账号自动带入，不要向用户索要姓名学号；缺少活动名称或时长时先追问。"
-    "若该工具返回未绑定账号，请提示用户在左侧「个人账号」中绑定或新建账号。"
+    "若工具返回未绑定账号或未绑定学校，请提示用户在左侧对应面板绑定。"
     "回答请简洁、使用中文。"
 )
 
 # ============================ 模拟数据 ============================
+# 每条记录带「类型」：校内 / 校外——用于把志愿时长拆成校内、校外与总计三个口径
 DEFAULT_DATA = [
-    {"姓名": "张三", "学号": "2023001", "志愿项目": "图书馆图书整理", "日期": "2026-09-12", "时长(小时)": 3.0},
-    {"姓名": "张三", "学号": "2023001", "志愿项目": "迎新志愿服务", "日期": "2026-09-20", "时长(小时)": 5.0},
-    {"姓名": "张三", "学号": "2023001", "志愿项目": "校园运动会保障", "日期": "2026-10-15", "时长(小时)": 4.5},
-    {"姓名": "李四", "学号": "2023002", "志愿项目": "图书馆图书整理", "日期": "2026-09-13", "时长(小时)": 2.5},
-    {"姓名": "李四", "学号": "2023002", "志愿项目": "社区敬老院慰问", "日期": "2026-10-01", "时长(小时)": 6.0},
-    {"姓名": "王五", "学号": "2023003", "志愿项目": "迎新志愿服务", "日期": "2026-09-20", "时长(小时)": 4.0},
-    {"姓名": "王五", "学号": "2023003", "志愿项目": "校园运动会保障", "日期": "2026-10-15", "时长(小时)": 3.5},
-    {"姓名": "王五", "学号": "2023003", "志愿项目": "实验室开放日引导", "日期": "2026-10-18", "时长(小时)": 2.0},
-    {"姓名": "赵六", "学号": "2023004", "志愿项目": "社区敬老院慰问", "日期": "2026-10-01", "时长(小时)": 5.5},
-    {"姓名": "赵六", "学号": "2023004", "志愿项目": "图书馆图书整理", "日期": "2026-10-08", "时长(小时)": 3.0},
+    {"姓名": "张三", "学号": "2023001", "志愿项目": "图书馆图书整理", "类型": "校内",
+     "日期": "2026-09-12", "时长(小时)": 3.0, "地点": "金海校区图书馆", "备注": "院系组织"},
+    {"姓名": "张三", "学号": "2023001", "志愿项目": "迎新志愿服务", "类型": "校内",
+     "日期": "2026-09-20", "时长(小时)": 5.0, "地点": "校门广场", "备注": ""},
+    {"姓名": "张三", "学号": "2023001", "志愿项目": "校园运动会保障", "类型": "校内",
+     "日期": "2026-10-15", "时长(小时)": 4.5, "地点": "东区田径场", "备注": ""},
+    {"姓名": "张三", "学号": "2023001", "志愿项目": "地铁站客流引导", "类型": "校外",
+     "日期": "2026-10-22", "时长(小时)": 3.0, "地点": "12 号线金海路站", "备注": "晚高峰"},
+    {"姓名": "李四", "学号": "2023002", "志愿项目": "图书馆图书整理", "类型": "校内",
+     "日期": "2026-09-13", "时长(小时)": 2.5, "地点": "金海校区图书馆", "备注": ""},
+    {"姓名": "李四", "学号": "2023002", "志愿项目": "社区敬老院慰问", "类型": "校外",
+     "日期": "2026-10-01", "时长(小时)": 6.0, "地点": "浦东新区金桥敬老院", "备注": "国庆场"},
+    {"姓名": "王五", "学号": "2023003", "志愿项目": "迎新志愿服务", "类型": "校内",
+     "日期": "2026-09-20", "时长(小时)": 4.0, "地点": "校门广场", "备注": ""},
+    {"姓名": "王五", "学号": "2023003", "志愿项目": "校园运动会保障", "类型": "校内",
+     "日期": "2026-10-15", "时长(小时)": 3.5, "地点": "东区田径场", "备注": ""},
+    {"姓名": "王五", "学号": "2023003", "志愿项目": "实验室开放日引导", "类型": "校内",
+     "日期": "2026-10-18", "时长(小时)": 2.0, "地点": "实验楼 A 座", "备注": ""},
+    {"姓名": "王五", "学号": "2023003", "志愿项目": "徐汇滨江文明劝导", "类型": "校外",
+     "日期": "2026-10-25", "时长(小时)": 4.0, "地点": "徐汇滨江步道", "备注": ""},
+    {"姓名": "赵六", "学号": "2023004", "志愿项目": "社区敬老院慰问", "类型": "校外",
+     "日期": "2026-10-01", "时长(小时)": 5.5, "地点": "浦东新区金桥敬老院", "备注": ""},
+    {"姓名": "赵六", "学号": "2023004", "志愿项目": "图书馆图书整理", "类型": "校内",
+     "日期": "2026-10-08", "时长(小时)": 3.0, "地点": "金海校区图书馆", "备注": ""},
 ]
+RECORD_COLUMNS = ["姓名", "学号", "志愿项目", "类型", "日期", "时长(小时)", "地点", "备注"]
+KIND_ON, KIND_OFF = "校内", "校外"
 
 # ============================ 个人账号 ============================
 # 可绑定的演示账号（与 DEFAULT_DATA 中的志愿者对应），也支持自己新建账号
@@ -89,257 +115,36 @@ DEMO_ACCOUNTS = [
 ]
 
 # ============================ 学校与志愿活动数据 ============================
-# 可绑定学校（真实校区与坐标，用于计算校外活动距离）
-SCHOOLS = [
-    {"名称": "上海杉达学院（金海校区）", "城市": "上海", "校区": "金海校区",
-     "地址": "浦东新区金海路 2727 号", "lat": 31.268682, "lng": 121.659202,
-     "官网": "https://www.sandau.edu.cn", "查号": "021-50210894"},
-    {"名称": "上海杉达学院（嘉善校区）", "城市": "嘉兴", "校区": "嘉善校区",
-     "地址": "浙江省嘉善县人民大道 505 号", "lat": 30.828400, "lng": 120.928300,
-     "官网": "https://www.sandau.edu.cn", "查号": "0573-84239202"},
-    {"名称": "复旦大学（邯郸校区）", "城市": "上海", "校区": "邯郸校区",
-     "地址": "杨浦区邯郸路 220 号", "lat": 31.298900, "lng": 121.503300,
-     "官网": "https://www.fudan.edu.cn", "查号": "021-65642222"},
-    {"名称": "上海交通大学（闵行校区）", "城市": "上海", "校区": "闵行校区",
-     "地址": "闵行区东川路 800 号", "lat": 31.024300, "lng": 121.433800,
-     "官网": "https://www.sjtu.edu.cn", "查号": "021-54740000"},
-    {"名称": "同济大学（四平路校区）", "城市": "上海", "校区": "四平路校区",
-     "地址": "杨浦区四平路 1239 号", "lat": 31.282900, "lng": 121.506000,
-     "官网": "https://www.tongji.edu.cn", "查号": "021-65982200"},
-]
-
-# 上海各区（校外活动区域筛选）
-SHANGHAI_DISTRICTS = [
-    "浦东新区", "黄浦区", "徐汇区", "长宁区", "静安区", "普陀区",
-    "虹口区", "杨浦区", "闵行区", "宝山区", "嘉定区", "松江区", "青浦区", "奉贤区",
-]
+# 数据来源：regions.json（34 省 / 368 市 / 3078 区县）与 universities.json（全国 1308 所本科高校），
+# 由 tools/build_geo_data.py 从公开数据集生成；学校对象统一由 geo.py 提供。
+SCHOOLS = geo.SCHOOLS
 
 # 报名入口（官方平台）
-LINK_SANDA = "https://www.sandau.edu.cn"          # 上海杉达学院官网（校团委通知/志愿招募）
-LINK_SH_VOL = "https://www.volunteer.sh.cn"       # 上海志愿者网（全市志愿项目报名）
-LINK_SSTM = "https://www.sstm.org.cn"             # 上海科技馆 / 天文馆志愿者
-LINK_LIB = "https://www.library.sh.cn"            # 上海图书馆志愿者
-LINK_ART = "https://www.artmuseumonline.org"      # 中华艺术宫
-LINK_BLOOD = "https://www.sbc.org.cn"             # 上海市血液中心
-
-# 校内活动（模拟“实时更新”：报名人数会随时间增长）
-ON_CAMPUS = [
-    {"id": "C101", "标题": "图书馆书库整理与导读", "主办": "杉达学院图书馆", "地点": "金海校区图书馆 3F 书库",
-     "日期": "2026-10-29", "时间段": "14:00-17:00", "时长": 3.0, "名额": 25, "已报名": 16,
-     "标签": ["图书管理", "室内"], "更新时间": 4, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "协助馆员完成书库错架整理、新书上架与阅览区导读，服务对象为全校师生。",
-              "招募对象": "在校生，专业不限；需能连续站立 2 小时以上",
-              "集合": "图书馆 1F 服务台，提前 10 分钟签到并领取志愿马甲",
-              "联系人": "图书馆读者服务部 王老师（021-20262610）",
-              "注意": "馆内保持安静；贵重物品随身携带；服务结束后现场签退认定时长"}},
-    {"id": "C102", "标题": "校运会赛事保障志愿者", "主办": "校体育运动委员会", "地点": "金海校区东区田径场",
-     "日期": "2026-10-31", "时间段": "08:00-12:00", "时长": 4.0, "名额": 40, "已报名": 34,
-     "标签": ["大型活动", "户外"], "更新时间": 9, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "负责检录引导、器材搬运、赛道秩序维护与终点搀扶，保障校田径运动会顺利进行。",
-              "招募对象": "在校生，身体健康；有急救证者优先",
-              "集合": "东区田径场主席台西侧志愿者服务点",
-              "联系人": "校体委办公室 李老师（021-20262610 转 3）",
-              "注意": "穿运动鞋、自备防晒；雨天照常举行，请携带雨具"}},
-    {"id": "C103", "标题": "校园开放日招生咨询引导", "主办": "招生办公室", "地点": "金海校区南门报到大厅",
-     "日期": "2026-11-07", "时间段": "09:00-16:00", "时长": 6.0, "名额": 30, "已报名": 12,
-     "标签": ["引导", "对外接待"], "更新时间": 21, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "为前来参加校园开放日的高中生及家长提供路线引导、资料发放与常见问题解答。",
-              "招募对象": "在校生，普通话标准，熟悉校园布局",
-              "集合": "南门报到大厅志愿者签到处",
-              "联系人": "招生办 张老师（021-50210897）",
-              "注意": "提前参加 11-06 晚 30 分钟线上培训；统一着校徽志愿者服"}},
-    {"id": "C104", "标题": "无偿献血现场服务", "主办": "校医院 · 上海市血液中心", "地点": "大学生活动中心 1 号厅",
-     "日期": "2026-11-03", "时间段": "10:00-16:00", "时长": 6.0, "名额": 30, "已报名": 13,
-     "标签": ["公益", "医疗协助"], "更新时间": 33, "报名链接": LINK_BLOOD,
-     "详情": {"介绍": "配合血液中心医护人员完成登记填表、排队引导、糖水发放与献血后观察陪护。",
-              "招募对象": "在校生，无传染性疾病；本人不参与献血",
-              "集合": "大学生活动中心 1 号厅入口",
-              "联系人": "校医院保健科（021-20262610 转 6）",
-              "注意": "服务期间佩戴口罩；不得代替医护人员做任何医学判断"}},
-    {"id": "C105", "标题": "“书香杉达”读书月布展", "主办": "校图书馆 · 学生会", "地点": "图书馆 1F 中庭",
-     "日期": "2026-11-05", "时间段": "13:00-17:00", "时长": 4.0, "名额": 15, "已报名": 5,
-     "标签": ["布展", "文化活动"], "更新时间": 47, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "参与读书月主题展板搭建、书目推荐卡制作与现场秩序维护。",
-              "招募对象": "在校生，有手工/设计经验者优先",
-              "集合": "图书馆 1F 中庭",
-              "联系人": "图书馆办公室 陈老师",
-              "注意": "使用美工刀等工具时注意安全；展后共同撤展"}},
-    {"id": "C106", "标题": "校园垃圾分类督导", "主办": "后勤保卫处", "地点": "学生公寓 3 号楼前投放点",
-     "日期": "2026-11-02", "时间段": "07:30-09:30", "时长": 2.0, "名额": 18, "已报名": 7,
-     "标签": ["环保", "校园治理"], "更新时间": 62, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "在早间投放高峰时段引导同学正确分类，记录混投情况并反馈后勤。",
-              "招募对象": "在校生，住在金海校区者优先",
-              "集合": "3 号楼前垃圾分类投放点",
-              "联系人": "后勤保卫处 环卫科",
-              "注意": "佩戴手套与袖标；遇到不配合情况只做劝导，不与同学争执"}},
-]
-
-# 校外活动（覆盖上海全市各区，带经纬度，按绑定学校计算距离）
-OFF_CAMPUS = [
-    {"id": "O201", "标题": "地铁 12 号线金海路站客流引导", "主办": "上海地铁志愿服务总队",
-     "地址": "浦东新区 · 金海路站站厅", "区域": "浦东新区",
-     "日期": "2026-10-28", "时间段": "16:30-19:30", "时长": 3.0, "名额": 20, "已报名": 12,
-     "标签": ["交通引导", "城市服务"], "lat": 31.262000, "lng": 121.635000, "更新时间": 3,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "晚高峰在闸机口与换乘通道引导客流、协助老人与携带大件行李乘客进出站。",
-              "招募对象": "18 岁以上，能听懂普通话与基本上海话",
-              "集合": "金海路站站长室（12 号线站厅层）",
-              "联系人": "地铁志愿总队 值班站长",
-              "注意": "不得进入轨行区；站内禁用自拍杆；需提前 15 分钟到岗接受安全交底"}},
-    {"id": "O202", "标题": "上海科技馆展厅科普引导", "主办": "上海科技馆志愿者服务基地",
-     "地址": "浦东新区 · 世纪大道 2000 号", "区域": "浦东新区",
-     "日期": "2026-11-01", "时间段": "09:00-17:00", "时长": 8.0, "名额": 30, "已报名": 22,
-     "标签": ["科普", "场馆服务"], "lat": 31.217600, "lng": 121.541900, "更新时间": 11,
-     "报名链接": LINK_SSTM,
-     "详情": {"介绍": "在常设展区提供路线指引、展项原理解说与秩序维护，是科技馆长期运行的品牌志愿岗。",
-              "招募对象": "在校大学生，理工科背景优先；需通过馆方线上岗前测试",
-              "集合": "科技馆 1 号门志愿者之家",
-              "联系人": "科技馆志愿者基地（021-68622000）",
-              "注意": "全天岗，午餐由馆方提供；须穿平底鞋，馆内不可饮食"}},
-    {"id": "O203", "标题": "上海图书馆东馆“书香伴读”", "主办": "上海图书馆（东馆）",
-     "地址": "浦东新区 · 合欢路 300 号", "区域": "浦东新区",
-     "日期": "2026-11-04", "时间段": "13:30-17:30", "时长": 4.0, "名额": 15, "已报名": 9,
-     "标签": ["伴读", "图书管理"], "lat": 31.222600, "lng": 121.550300, "更新时间": 18,
-     "报名链接": LINK_LIB,
-     "详情": {"介绍": "在少儿阅览区陪伴小读者阅读、整理归还图书并协助自助借还机使用。",
-              "招募对象": "在校生，喜爱与儿童沟通",
-              "集合": "东馆 1F 少儿区服务台",
-              "联系人": "上图读者服务中心",
-              "注意": "需保持安静；不与小读者单独离开阅览区"}},
-    {"id": "O204", "标题": "中华艺术宫观众服务", "主办": "中华艺术宫（上海美术馆）",
-     "地址": "浦东新区 · 上南路 205 号", "区域": "浦东新区",
-     "日期": "2026-11-06", "时间段": "10:00-16:00", "时长": 6.0, "名额": 20, "已报名": 7,
-     "标签": ["美术", "讲解"], "lat": 31.183700, "lng": 121.489600, "更新时间": 26,
-     "报名链接": LINK_ART,
-     "详情": {"介绍": "为参观者提供导览路线咨询、重点展品讲解与文明观展提醒。",
-              "招募对象": "在校生，对美术史有兴趣；需参加 1 次线上培训",
-              "集合": "艺术宫 0 米层观众服务中心",
-              "联系人": "艺术宫公共教育部",
-              "注意": "展厅内禁止触摸展品；讲解口径以馆方提供文稿为准"}},
-    {"id": "O205", "标题": "徐汇滨江“文明游园”劝导", "主办": "徐汇区新时代文明实践中心",
-     "地址": "徐汇区 · 龙腾大道西岸沿线", "区域": "徐汇区",
-     "日期": "2026-11-08", "时间段": "14:00-18:00", "时长": 4.0, "名额": 25, "已报名": 10,
-     "标签": ["环保", "城市治理"], "lat": 31.188000, "lng": 121.459000, "更新时间": 35,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "沿滨江步道劝导遛狗牵绳、垃圾分类投放，并为游客提供问路指引。",
-              "招募对象": "在校生，能连续步行 3 公里以上",
-              "集合": "西岸艺术中心 A 馆前广场志愿驿站",
-              "联系人": "徐汇区志愿服务中心",
-              "注意": "统一发放马甲与垃圾夹；劝导以礼为先，不强制"}},
-    {"id": "O206", "标题": "南京东路步行街文明引导", "主办": "黄浦区志愿者协会",
-     "地址": "黄浦区 · 南京东路世纪广场", "区域": "黄浦区",
-     "日期": "2026-11-09", "时间段": "15:00-19:00", "时长": 4.0, "名额": 30, "已报名": 18,
-     "标签": ["交通引导", "大客流"], "lat": 31.237000, "lng": 121.475000, "更新时间": 41,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "节假日大客流时段在步行街值守，提供问路咨询、协助疏导人流与应急联络。",
-              "招募对象": "在校生，表达清晰，能应对大客流环境",
-              "集合": "世纪广场志愿服务亭",
-              "联系人": "黄浦区志愿者协会",
-              "注意": "严禁与游客发生冲突；发现异常情况立即报告现场民警"}},
-    {"id": "O207", "标题": "静安寺街道“为老送餐”", "主办": "静安寺街道社区志愿服务中心",
-     "地址": "静安区 · 愚园路街区", "区域": "静安区",
-     "日期": "2026-11-10", "时间段": "10:30-13:30", "时长": 3.0, "名额": 12, "已报名": 6,
-     "标签": ["助老", "社区"], "lat": 31.225000, "lng": 121.445000, "更新时间": 52,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "为社区高龄独居老人配送午餐，并做简单的问候与居家安全观察记录。",
-              "招募对象": "在校生，耐心细致，会讲上海话者优先",
-              "集合": "静安寺街道社区食堂",
-              "联系人": "街道为老服务中心",
-              "注意": "不进入老人卧室；不代收钱款；异常情况当日反馈社工"}},
-    {"id": "O208", "标题": "杨浦滨江人民城市建设展示馆讲解", "主办": "杨浦区滨江志愿服务队",
-     "地址": "杨浦区 · 安浦路 461 号", "区域": "杨浦区",
-     "日期": "2026-11-11", "时间段": "09:30-14:30", "时长": 5.0, "名额": 10, "已报名": 4,
-     "标签": ["讲解", "城市历史"], "lat": 31.262000, "lng": 121.538000, "更新时间": 58,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "为参观团队提供展馆讲解，讲述杨浦滨江从工业锈带到生活秀带的转型历程。",
-              "招募对象": "在校生，普通话二级甲等以上优先；需背熟讲解稿",
-              "集合": "展示馆 1F 序厅",
-              "联系人": "滨江志愿服务队",
-              "注意": "讲解稿以馆方最新版本为准；每场讲解不超过 40 分钟"}},
-    {"id": "O209", "标题": "上海市血液中心献血屋服务", "主办": "上海市血液中心",
-     "地址": "长宁区 · 虹桥路 1191 号", "区域": "长宁区",
-     "日期": "2026-11-12", "时间段": "09:00-13:00", "时长": 4.0, "名额": 15, "已报名": 8,
-     "标签": ["公益", "医疗协助"], "lat": 31.199000, "lng": 121.408000, "更新时间": 66,
-     "报名链接": LINK_BLOOD,
-     "详情": {"介绍": "在献血屋协助登记、引导体检流程、发放纪念品与献血后观察陪护。",
-              "招募对象": "在校生，身体健康；有志愿服务经历者优先",
-              "集合": "血液中心献血屋前台",
-              "联系人": "血液中心社会服务部",
-              "注意": "不接触血液标本；严格保护献血者隐私，不得拍照"}},
-    {"id": "O210", "标题": "顾村公园“赏樱季”文明引导", "主办": "宝山区绿化市容局志愿服务队",
-     "地址": "宝山区 · 沪太路 4788 号", "区域": "宝山区",
-     "日期": "2026-11-14", "时间段": "08:30-14:30", "时长": 6.0, "名额": 40, "已报名": 26,
-     "标签": ["环保", "大客流"], "lat": 31.348000, "lng": 121.370000, "更新时间": 72,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "在主要赏花点位维持游园秩序、劝导不文明行为、协助走失儿童求助。",
-              "招募对象": "在校生，能适应户外长时间站立",
-              "集合": "顾村公园 1 号门游客中心",
-              "联系人": "宝山区绿化市容局志愿队",
-              "注意": "园内禁用扩音器；垃圾随身带走；雨天活动顺延"}},
-    {"id": "O211", "标题": "松江大学城“爱心寒托班”助教", "主办": "松江区团委 · 社区少工委",
-     "地址": "松江区 · 文汇路街道社区学校", "区域": "松江区",
-     "日期": "2026-11-16", "时间段": "08:30-16:30", "时长": 8.0, "名额": 18, "已报名": 5,
-     "标签": ["支教", "青少年"], "lat": 31.038000, "lng": 121.220000, "更新时间": 80,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "协助班主任管理课堂纪律、辅导作业、组织手工与体育活动。",
-              "招募对象": "在校生，有家教或带班经验者优先；需提供健康承诺书",
-              "集合": "文汇路街道社区学校一楼大厅",
-              "联系人": "松江区团委学校部",
-              "注意": "全程两名志愿者在场；不得单独带学生离开教学区"}},
-    {"id": "O212", "标题": "普陀“半马苏河”驿站便民服务", "主办": "普陀区长寿路街道志愿服务中心",
-     "地址": "普陀区 · 苏州河长寿段驿站", "区域": "普陀区",
-     "日期": "2026-11-15", "时间段": "09:00-12:00", "时长": 3.0, "名额": 14, "已报名": 3,
-     "标签": ["便民", "社区"], "lat": 31.240000, "lng": 121.425000, "更新时间": 88,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "在滨河驿站提供饮水、充电、应急药品借用与路线咨询服务。",
-              "招募对象": "在校生，性格开朗，能使用基础办公设备",
-              "集合": "半马苏河驿站（长寿路段）",
-              "联系人": "长寿路街道志愿服务中心",
-              "注意": "药品仅登记发放，不做用药建议；每日盘点物资"}},
-]
-
-# 定时注入的新活动（模拟推送到达）
-NEW_POOL = [
-    {"kind": "on", "id": "C107", "标题": "新生心理健康讲座协助", "主办": "心理健康教育中心", "地点": "金海校区学术报告厅",
-     "日期": "2026-11-06", "时间段": "18:30-21:00", "时长": 2.5, "名额": 8, "已报名": 1,
-     "标签": ["讲座协助", "室内"], "更新时间": 1, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "负责入场签到、座位引导与讲座后问卷回收。", "招募对象": "在校生",
-              "集合": "学术报告厅前厅", "联系人": "心理健康教育中心", "注意": "讲座内容涉及同学隐私，不得录音录像"}},
-    {"kind": "off", "id": "O213", "标题": "虹口鲁迅公园“无障碍陪伴”", "主办": "虹口区残疾人联合会",
-     "地址": "虹口区 · 四川北路 2288 号", "区域": "虹口区",
-     "日期": "2026-11-13", "时间段": "13:30-16:30", "时长": 3.0, "名额": 12, "已报名": 9,
-     "标签": ["助残", "公园"], "lat": 31.273000, "lng": 121.478000, "更新时间": 1,
-     "报名链接": LINK_SH_VOL,
-     "详情": {"介绍": "陪同视障朋友游园，提供口述影像与路线引导。", "招募对象": "在校生，有耐心",
-              "集合": "鲁迅公园南门", "联系人": "虹口区残联", "注意": "先询问再搀扶；不擅自替对方做决定"}},
-    {"kind": "on", "id": "C108", "标题": "校园反诈宣传摊位", "主办": "保卫处 · 学生会", "地点": "学生食堂西门广场",
-     "日期": "2026-11-08", "时间段": "11:00-13:00", "时长": 2.0, "名额": 10, "已报名": 2,
-     "标签": ["宣传", "安全"], "更新时间": 1, "报名链接": LINK_SANDA,
-     "详情": {"介绍": "发放反诈手册、指导同学安装国家反诈中心 APP。", "招募对象": "在校生",
-              "集合": "食堂西门广场", "联系人": "保卫处", "注意": "不代同学操作手机银行"}},
-    {"kind": "off", "id": "O214", "标题": "上海天文馆星空讲解志愿岗", "主办": "上海天文馆",
-     "地址": "浦东新区 · 临港大道 380 号", "区域": "浦东新区",
-     "日期": "2026-11-18", "时间段": "09:00-17:00", "时长": 8.0, "名额": 20, "已报名": 16,
-     "标签": ["科普", "讲解"], "lat": 30.910400, "lng": 121.925000, "更新时间": 1,
-     "报名链接": LINK_SSTM,
-     "详情": {"介绍": "在家园、宇宙、征程三大展区提供展项讲解与观展引导。", "招募对象": "在校生，天文爱好者优先",
-              "集合": "天文馆 1 号门志愿者之家", "联系人": "天文馆志愿者基地", "注意": "需提前完成馆方线上培训并考核"}},
-]
-
+LINK_SANDA = geo.LINK_SANDA        # 上海杉达学院官网（校团委通知 / 志愿招募）
+LINK_SH_VOL = geo.LINK_SH_VOL      # 上海志愿者网（全市志愿项目报名）
+LINK_CN_VOL = geo.LINK_CN_VOL      # 中国志愿服务网（全国志愿项目报名）
+LINK_SSTM = geo.LINK_SSTM          # 上海科技馆 / 天文馆志愿者
+LINK_LIB = geo.LINK_LIB            # 上海图书馆志愿者
+LINK_ART = geo.LINK_ART            # 中华艺术宫
+LINK_BLOOD = geo.LINK_BLOOD        # 上海市血液中心
 
 
 def haversine_km(lat1, lng1, lat2, lng2) -> float:
-    """两坐标间球面距离（公里），用于计算校外活动与学校的距离"""
-    from math import radians, sin, cos, asin, sqrt
+    return geo.haversine_km(lat1, lng1, lat2, lng2)
 
-    lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
-    dlat, dlng = lat2 - lat1, lng2 - lng1
-    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
-    return round(2 * 6371 * asin(sqrt(a)), 1)
+
+def region_activities(prov: str, city: str, area: str) -> list:
+    """按所选省市区生成校外活动池（同一地区结果稳定）"""
+    return geo.build_off_campus(prov, city, area)
+
+
+def school_activities(school: dict) -> list:
+    """按绑定学校生成校内活动池"""
+    return geo.build_on_campus(school)
 
 
 def tick_feed(force: bool = False):
-    """模拟活动实时更新：随时间推进报名人数、刷新“更新于 N 分钟”，并定时注入新活动"""
+    """模拟活动实时更新：随时间推进报名人数、刷新“更新于 N 分钟”，并定期推送新活动"""
     import random
     from datetime import datetime as _dt
 
@@ -351,25 +156,42 @@ def tick_feed(force: bool = False):
     st.session_state.feed_tick_at = now
 
     for key in ("activities_on", "activities_off"):
-        for a in st.session_state[key]:
+        for a in st.session_state.get(key, []):
             a["更新时间"] = a.get("更新时间", 0) + random.randint(0, 3)
             if a["已报名"] < a["名额"] and random.random() < 0.55:
                 a["已报名"] = min(a["名额"], a["已报名"] + random.randint(1, 2))
 
-    # 每累计两次轮询注入一条新活动，模拟推送到达
+    # 每累计两次轮询推送一条新活动：从更长的模板序列里取尚未展示的那条
     st.session_state.feed_polls = st.session_state.get("feed_polls", 0) + 1
     if st.session_state.feed_polls % 2 == 0:
-        used = st.session_state.get("feed_pool_used", 0)
-        if used < len(NEW_POOL):
-            item = dict(NEW_POOL[used])
-            item["更新时间"] = 1
-            st.session_state["activities_" + ("on" if item["kind"] == "on" else "off")].insert(0, item)
-            st.session_state.feed_pool_used = used + 1
-            st.session_state.new_push = item["标题"]
+        prov = st.session_state.get("act_prov", "")
+        city = st.session_state.get("act_city", "")
+        area = st.session_state.get("act_area", "")
+        shown = {a["标题"] for a in st.session_state.get("activities_off", [])}
+        if prov and area:
+            for a in geo.build_off_campus(prov, city, area, count=14):
+                if a["标题"] not in shown:
+                    a = dict(a)
+                    a["更新时间"] = 1
+                    st.session_state.activities_off.insert(0, a)
+                    st.session_state.new_push = f"{a['标题']}（{a['日期']}）"
+                    break
+        else:
+            shown_on = {a["标题"] for a in st.session_state.get("activities_on", [])}
+            school = st.session_state.get("bound_school")
+            if school:
+                for a in geo.build_on_campus(school, count=12):
+                    if a["标题"] not in shown_on:
+                        a = dict(a)
+                        a["更新时间"] = 1
+                        st.session_state.activities_on.insert(0, a)
+                        st.session_state.new_push = f"{a['标题']}（{a['日期']}）"
+                        break
 
 TOOL_ICON = {
     "query_volunteer_data": "🔍",
     "calc_total_hours": "🧮",
+    "calc_hours_by_type": "⚖️",
     "export_volunteer_excel": "📤",
     "query_open_activities": "🏫",
     "add_volunteer_record": "📝",
@@ -404,7 +226,9 @@ def read_recent_logs(n: int = 30) -> str:
 def init_state():
     """初始化会话状态（模拟数据表、日志、聊天记录、导出文件）"""
     if "volunteer_df" not in st.session_state:
-        st.session_state.volunteer_df = pd.DataFrame(DEFAULT_DATA)
+        st.session_state.volunteer_df = pd.DataFrame(DEFAULT_DATA, columns=RECORD_COLUMNS)
+    else:
+        st.session_state.volunteer_df = migrate_df(st.session_state.volunteer_df)
     if "tool_logs" not in st.session_state:
         st.session_state.tool_logs = []          # 工具调用日志
     if "history" not in st.session_state:
@@ -424,26 +248,52 @@ def init_state():
         st.session_state.acct_new = False          # 是否正在新建账号
     if "show_all_rows" not in st.session_state:
         st.session_state.show_all_rows = False     # 数据表是否显示全部人
-    # —— 学校绑定与活动推送 ——
+    # —— 学校绑定（默认：上海杉达学院 金海校区）——
     if "bound_school" not in st.session_state:
-        # 默认绑定上海杉达学院（金海校区），打开即可看到校内活动与上海全市推送
-        st.session_state.bound_school = dict(SCHOOLS[0])
+        st.session_state.bound_school = geo.default_school()
+    school = st.session_state.get("bound_school") or geo.default_school()
+    # —— 活动地区（省 / 市 / 区县三级联动）——
+    if "act_prov" not in st.session_state:
+        st.session_state.act_prov = school.get("省份") or (geo.provinces()[0] if geo.provinces() else "")
+    if "act_city" not in st.session_state:
+        st.session_state.act_city = school.get("城市") or ""
+    if "act_area" not in st.session_state:
+        st.session_state.act_area = school.get("区") or ""
+    if "act_scope" not in st.session_state:
+        st.session_state.act_scope = "全部"        # 全部 / 校内 / 校外
+    if "act_kw" not in st.session_state:
+        st.session_state.act_kw = ""               # 活动关键字
+    # —— 活动池 ——
     if "activities_on" not in st.session_state:
-        st.session_state.activities_on = [dict(a) for a in ON_CAMPUS]
+        st.session_state.activities_on = school_activities(school)
     if "activities_off" not in st.session_state:
-        st.session_state.activities_off = [dict(a) for a in OFF_CAMPUS]
-    if "feed_pool_used" not in st.session_state:
-        st.session_state.feed_pool_used = 0      # 已注入的新活动数量
+        st.session_state.activities_off = region_activities(
+            st.session_state.act_prov, st.session_state.act_city, st.session_state.act_area)
     if "feed_tick_at" not in st.session_state:
         st.session_state.feed_tick_at = None     # 上次更新时间
     if "feed_polls" not in st.session_state:
         st.session_state.feed_polls = 0
-    if "push_district" not in st.session_state:
-        st.session_state.push_district = "全部区域"   # 校外活动区域筛选
-    if "push_keyword" not in st.session_state:
-        st.session_state.push_keyword = ""           # 校外活动关键字
     if "new_push" not in st.session_state:
         st.session_state.new_push = None         # 新推送提示
+    if "show_my_records" not in st.session_state:
+        st.session_state.show_my_records = False
+    if "detail_kind" not in st.session_state:
+        st.session_state.detail_kind = "全部"     # 明细面板口径：全部 / 校内 / 校外
+
+
+def migrate_df(df):
+    """兼容旧会话：补齐「类型 / 地点 / 备注」列，并按项目名推断校内或校外"""
+    df = df.copy()
+    if "类型" not in df.columns:
+        on_words = ("图书馆", "迎新", "运动会", "校园", "实验室", "校运会", "宿舍")
+        df["类型"] = df["志愿项目"].map(lambda x: KIND_ON if any(w in str(x) for w in on_words) else KIND_OFF)
+    for col in ("地点", "备注"):
+        if col not in df.columns:
+            df[col] = ""
+    df["类型"] = df["类型"].fillna(KIND_OFF).replace({"": KIND_OFF})
+    for col in ("地点", "备注"):
+        df[col] = df[col].fillna("")
+    return df[RECORD_COLUMNS]
 
 
 # ============================ 工具实现 ============================
@@ -456,10 +306,11 @@ def _parse_date(text):
 
 
 def query_volunteer_data(start_date: str, end_date: str, project_name: str = "",
-                         scope: str = "me") -> dict:
+                         scope: str = "me", kind: str = "") -> dict:
     """工具1：按起止日期查询志愿记录。
     scope=me 只查当前绑定账号本人的记录（默认，与页面记录口径保持一致）；
-    scope=all 查全部成员记录。project_name 为可选的项目名称筛选关键字。"""
+    scope=all 查全部成员记录。project_name 为可选的项目名称筛选关键字；
+    kind 可选「校内 / 校外」，用于只看某一类记录。"""
     d1, d2 = _parse_date(start_date), _parse_date(end_date)
     if d1 is None or d2 is None:
         return {"status": "error", "message": "日期格式不正确，请使用 YYYY-MM-DD 格式，例如 2026-09-01。"}
@@ -483,6 +334,14 @@ def query_volunteer_data(start_date: str, end_date: str, project_name: str = "",
     mask = (df["日期date"] >= d1) & (df["日期date"] <= d2)
     if project_name:
         mask &= df["志愿项目"].str.contains(str(project_name).strip(), na=False)
+    kind_txt = str(kind or "").strip()
+    kind_sel = ""
+    if kind_txt in ("校内", "on", "on_campus", "校园"):
+        kind_sel = KIND_ON
+    elif kind_txt in ("校外", "off", "off_campus", "社会"):
+        kind_sel = KIND_OFF
+    if kind_sel:
+        mask &= df["类型"] == kind_sel
     result = df[mask].drop(columns=["日期date"])
 
     if result.empty:
@@ -491,16 +350,22 @@ def query_volunteer_data(start_date: str, end_date: str, project_name: str = "",
             "status": "empty",
             "scope": "all" if want_all else "me",
             "owner": owner_label,
-            "message": f"{owner_label}在 {tip} 时间范围内没有志愿记录。",
+            "message": f"{owner_label}在 {tip} 时间范围内没有{kind_sel or ''}志愿记录。",
             "records": [],
         }
 
+    split = {
+        KIND_ON: float(round(result.loc[result["类型"] == KIND_ON, "时长(小时)"].sum(), 2)),
+        KIND_OFF: float(round(result.loc[result["类型"] == KIND_OFF, "时长(小时)"].sum(), 2)),
+    }
     return {
         "status": "success",
         "scope": "all" if want_all else "me",
         "owner": owner_label,
         "count": int(len(result)),
-        "message": f"{owner_label}共查询到 {len(result)} 条志愿记录。",
+        "分类合计(小时)": {**split, "合计": float(round(split[KIND_ON] + split[KIND_OFF], 2))},
+        "message": f"{owner_label}共查询到 {len(result)} 条志愿记录"
+                   f"（校内 {split[KIND_ON]:g} 小时、校外 {split[KIND_OFF]:g} 小时）。",
         "records": result.to_dict(orient="records"),
     }
 
@@ -518,27 +383,102 @@ def calc_total_hours(records: list = None) -> dict:
         if "姓名" not in df.columns or "时长(小时)" not in df.columns:
             return {"status": "error", "message": "传入的记录缺少“姓名”或“时长(小时)”字段，无法统计。"}
         df["时长(小时)"] = pd.to_numeric(df["时长(小时)"], errors="coerce").fillna(0)
+        if "类型" not in df.columns:
+            df["类型"] = KIND_ON
         grouped = (
             df.groupby("姓名", as_index=False)["时长(小时)"]
             .sum()
             .sort_values("时长(小时)", ascending=False)
         )
         counts = df.groupby("姓名").size().reset_index(name="参与次数")
+        on_sum = df[df["类型"] == KIND_ON].groupby("姓名")["时长(小时)"].sum()
+        off_sum = df[df["类型"] == KIND_OFF].groupby("姓名")["时长(小时)"].sum()
         grouped = grouped.merge(counts, on="姓名")
         grouped["时长(小时)"] = grouped["时长(小时)"].round(2)
 
-        summary = [
-            {"姓名": r["姓名"], "总时长(小时)": float(r["时长(小时)"]), "参与次数": int(r["参与次数"])}
-            for _, r in grouped.iterrows()
-        ]
+        summary = []
+        for _, r in grouped.iterrows():
+            summary.append({
+                "姓名": r["姓名"],
+                "总时长(小时)": float(r["时长(小时)"]),
+                "校内(小时)": float(round(on_sum.get(r["姓名"], 0.0), 2)),
+                "校外(小时)": float(round(off_sum.get(r["姓名"], 0.0), 2)),
+                "参与次数": int(r["参与次数"]),
+            })
+        on_total = float(round(df.loc[df["类型"] == KIND_ON, "时长(小时)"].sum(), 2))
+        off_total = float(round(df.loc[df["类型"] == KIND_OFF, "时长(小时)"].sum(), 2))
         return {
             "status": "success",
-            "message": f"已统计 {len(summary)} 位同学的累计志愿时长。",
+            "message": f"已统计 {len(summary)} 位同学的累计志愿时长"
+                       f"（校内合计 {on_total:g} 小时、校外合计 {off_total:g} 小时）。",
             "summary": summary,
             "总计(小时)": float(round(df["时长(小时)"].sum(), 2)),
+            "校内合计(小时)": on_total,
+            "校外合计(小时)": off_total,
         }
     except Exception as e:  # 任何统计异常都不允许程序崩溃
         return {"status": "error", "message": f"统计失败：{e}"}
+
+
+def calc_hours_by_type(scope: str = "me", start_date: str = "", end_date: str = "") -> dict:
+    """工具（新增）：把志愿时长拆成「校内 / 校外 / 总计」三个口径。
+    默认统计当前账号本人全部记录；也可传入起止日期限定范围，或 scope=all 看全员合计。"""
+    acc = get_bound_account()
+    want_all = str(scope or "me").strip().lower() in ("all", "全员", "everyone", "team")
+    if not want_all and not acc:
+        return {"status": "error", "message": "尚未绑定个人账号，请先在左侧「个人账号」绑定后再统计。"}
+
+    df = st.session_state.volunteer_df.copy()
+    if not want_all:
+        df = df[df["姓名"] == acc["姓名"]]
+    owner_label = "全员" if want_all else f"{acc['姓名']}（本人）"
+
+    period = ""
+    if start_date or end_date:
+        d1 = _parse_date(start_date) or date.min
+        d2 = _parse_date(end_date) or date.max
+        if start_date and _parse_date(start_date) is None:
+            return {"status": "error", "message": f"起始日期「{start_date}」格式不正确，请用 YYYY-MM-DD。"}
+        if end_date and _parse_date(end_date) is None:
+            return {"status": "error", "message": f"结束日期「{end_date}」格式不正确，请用 YYYY-MM-DD。"}
+        df["_d"] = df["日期"].map(_parse_date)
+        df = df[(df["_d"] >= d1) & (df["_d"] <= d2)].drop(columns=["_d"])
+        period = f"{start_date or '最早'} 至 {end_date or '今天'}"
+
+    if df.empty:
+        return {"status": "empty", "owner": owner_label,
+                "message": f"{owner_label}在{period or '全部时间'}内没有志愿记录。"}
+
+    df["时长(小时)"] = pd.to_numeric(df["时长(小时)"], errors="coerce").fillna(0)
+    on_df = df[df["类型"] == KIND_ON]
+    off_df = df[df["类型"] == KIND_OFF]
+    on_h = float(round(on_df["时长(小时)"].sum(), 2))
+    off_h = float(round(off_df["时长(小时)"].sum(), 2))
+    total = float(round(on_h + off_h, 2))
+    ratio = f"校内 {on_h / total * 100:.0f}% · 校外 {off_h / total * 100:.0f}%" if total else "—"
+
+    def _projects(sub):
+        if sub.empty:
+            return []
+        g = sub.groupby("志愿项目")["时长(小时)"].sum().sort_values(ascending=False)
+        return [{"项目": k, "小时": float(round(v, 2))} for k, v in g.items()]
+
+    return {
+        "status": "success",
+        "owner": owner_label,
+        "期间": period or "全部时间",
+        "校内(小时)": on_h,
+        "校外(小时)": off_h,
+        "总计(小时)": total,
+        "校内条数": int(len(on_df)),
+        "校外条数": int(len(off_df)),
+        "占比": ratio,
+        "校内项目": _projects(on_df),
+        "校外项目": _projects(off_df),
+        "message": (f"{owner_label}累计志愿 {total:g} 小时："
+                    f"校内 {on_h:g} 小时（{len(on_df)} 条）、校外 {off_h:g} 小时（{len(off_df)} 条），"
+                    f"{ratio}。"),
+    }
 
 
 def export_volunteer_excel(summary: list = None) -> dict:
@@ -568,100 +508,228 @@ def export_volunteer_excel(summary: list = None) -> dict:
         return {"status": "error", "message": f"导出失败：{e}"}
 
 
-def query_open_activities(scope: str = "all", district: str = "", keyword: str = "") -> dict:
-    """工具4：查询校内正在招募的志愿活动，以及上海全市的校外活动（按距离由近到远）"""
-    school = st.session_state.get("bound_school")
-    if not school:
-        return {
-            "status": "error",
-            "message": "尚未绑定学校。请先在左侧「学校绑定」中选择学校并点击绑定，再查询活动。",
-        }
+def _norm_prov(text: str) -> str:
+    """把「上海 / 上海市 / 上海直辖市」这类写法统一成 regions.json 里的省名"""
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    if t in geo.REGIONS:
+        return t
+    for p in geo.provinces():
+        if p.startswith(t) or t.startswith(p[:2]):
+            return p
+    return t
 
+
+def _norm_city(prov: str, text: str) -> str:
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    cs = geo.cities(prov)
+    if t in cs:
+        return t
+    for c in cs:
+        if c.startswith(t) or t.startswith(c) or c[:2] == t[:2]:
+            return c
+    return t
+
+
+def _norm_area(prov: str, city: str, text: str) -> str:
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    ars = geo.areas(prov, city)
+    if t in ars:
+        return t
+    for a in ars:
+        if a.startswith(t) or t.startswith(a):
+            return a
+    return t
+
+
+def _find_prov_by_city(city: str) -> str:
+    """只给了城市名时，反查它属于哪个省级行政区（如「成都」→「四川省」）"""
+    t = str(city or "").strip()
+    if not t:
+        return ""
+    hits = [p for p in geo.provinces()
+            if any(c == t or c.startswith(t) or t.startswith(c[:2]) for c in geo.cities(p))]
+    return hits[0] if len(hits) == 1 else (hits[0] if hits else "")
+
+
+def _find_by_area(area: str) -> tuple:
+    """只给了区县名时，反查 (省, 市)（如「武侯区」→ (四川省, 成都市)）"""
+    t = str(area or "").strip()
+    if not t:
+        return "", ""
+    for p in geo.provinces():
+        for c in geo.cities(p):
+            if any(a == t or a.startswith(t) for a in geo.areas(p, c)):
+                return p, c
+    return "", ""
+
+
+def resolve_region(province: str = "", city: str = "", district: str = "") -> dict:
+    """把模型/界面传来的地区解析成 (省, 市, 区)，非法时给出可选项。
+
+    模型经常只给「成都」「武侯区」而漏掉省份，这里做反查补全，避免多跑一轮工具。
+    """
+    prov = _norm_prov(province)
+    raw_city, raw_area = str(city or "").strip(), str(district or "").strip()
+
+    # 省份缺省时，先按区县反查，再按城市反查
+    if not prov and raw_area:
+        prov = _find_by_area(raw_area)[0]
+    if not prov and raw_city:
+        prov = _find_prov_by_city(raw_city)
+    if not prov:
+        prov = st.session_state.get("act_prov", "")
+    if not prov or prov not in geo.REGIONS:
+        return {"status": "error",
+                "message": f"未识别省份「{province}」。可选省级行政区：{'、'.join(geo.provinces())}。"}
+
+    city = _norm_city(prov, raw_city)
+    if not city and raw_area:                       # 只给区县：反查所属地级市
+        city = _find_by_area(raw_area)[1]
+    if not city and prov == st.session_state.get("act_prov"):
+        city = st.session_state.get("act_city", "")
+    if not city:
+        city = geo.cities(prov)[0]
+    if city not in geo.cities(prov):
+        return {"status": "error",
+                "message": f"「{prov}」下没有「{raw_city}」。可选城市：{'、'.join(geo.cities(prov)[:12])}……"}
+
+    area = _norm_area(prov, city, raw_area)
+    if not area and (prov, city) == (st.session_state.get("act_prov"), st.session_state.get("act_city")):
+        area = st.session_state.get("act_area", "")
+    if area and area not in geo.areas(prov, city):
+        return {"status": "error",
+                "message": f"「{city}」下没有「{raw_area}」。可选区县：{'、'.join(geo.areas(prov, city)[:12])}……"}
+    return {"status": "ok", "province": prov, "city": city, "area": area}
+
+
+def query_open_activities(scope: str = "all", province: str = "", city: str = "",
+                          district: str = "", keyword: str = "") -> dict:
+    """工具4：查询志愿活动。
+    scope=on_campus 查绑定学校的校内活动；off_campus 查指定地区的校外活动（同城按距校区距离排序，跨市按日期排序）；
+    all 两者都查。province / city / district 支持全国任意省市区县，为空时用页面当前选择。"""
+    school = st.session_state.get("bound_school")
     kw = str(keyword or "").strip()
-    scope_raw = str(scope or "all").lower()
+    scope_raw = str(scope or "all").strip().lower()
     if scope_raw in ("on_campus", "on", "校内", "campus"):
         want_on, want_off = True, False
-    elif scope_raw in ("off_campus", "off", "校外", "nearby", "上海", "shanghai"):
+    elif scope_raw in ("off_campus", "off", "校外", "社会", "nearby"):
         want_on, want_off = False, True
     else:
         want_on, want_off = True, True
 
-    # 区域：空 / "all" / "全部" 视为不限（覆盖上海全市）
-    dist_raw = str(district or "").strip()
-    district_name = "" if dist_raw.lower() in ("", "all", "全部", "全部区域", "上海市", "上海") else dist_raw
-    if district_name and not district_name.endswith("区"):
-        district_name += "区"
-    if district_name and district_name not in SHANGHAI_DISTRICTS:
-        return {
-            "status": "error",
-            "message": f"未识别区域「{dist_raw}」。上海市可选区域：{'、'.join(SHANGHAI_DISTRICTS)}；"
-                       "也可以不传 district，默认推送上海全市的活动。",
-        }
+    if want_on and not school:
+        return {"status": "error",
+                "message": "尚未绑定学校，无法查询校内活动。请先在左侧「学校绑定」中选择并绑定学校。"}
+
+    reg = resolve_region(province, city, district)
+    if reg["status"] != "ok":
+        return {"status": "error", "message": reg["message"]}
+    prov, cty, area = reg["province"], reg["city"], reg["area"]
 
     def _match(act):
         if not kw:
             return True
-        blob = " ".join(
-            [str(act.get("标题", "")), str(act.get("主办", "")), " ".join(act.get("标签", []))]
-        )
+        blob = " ".join([str(act.get("标题", "")), str(act.get("主办", "")),
+                         " ".join(act.get("标签", [])), str(act.get("分类", ""))])
         return kw in blob
 
+    def _dist(a):
+        if not school or not school.get("lat") or not a.get("lat"):
+            return None
+        return geo.haversine_km(school["lat"], school["lng"], a["lat"], a["lng"])
+
     on_list, off_list = [], []
+    # 所选地区是否就在校区所在城市——只有同城时「按距离排序」才有意义
+    same_city_as_school = bool(school) and cty == geo.full_city(
+        school.get("省份", ""), school.get("城市", ""))
     if want_on:
-        for a in st.session_state.activities_on:
+        for a in st.session_state.get("activities_on") or school_activities(school):
             if _match(a):
                 on_list.append({
                     "标题": a["标题"], "主办": a["主办"], "地点": a["地点"],
                     "日期": a["日期"], "时间段": a["时间段"], "时长(小时)": a["时长"],
                     "名额": a["名额"], "已报名": a["已报名"],
                     "剩余名额": max(0, a["名额"] - a["已报名"]), "标签": a["标签"],
-                    "报名链接": a.get("报名链接", LINK_SANDA),
+                    "类型": KIND_ON, "报名链接": a.get("报名链接", LINK_SANDA),
                 })
         on_list.sort(key=lambda x: x["日期"])
     if want_off:
-        for a in st.session_state.activities_off:
-            if district_name and a.get("区域") != district_name:
+        # 只有当前页面选中的就是同一地区时才复用缓存池，否则按工具参数重建，
+        # 否则模型问「成都武侯区」会读到页面上残留的上海活动池，被过滤成空结果。
+        same_region = (prov, cty, area) == (
+            st.session_state.get("act_prov"),
+            st.session_state.get("act_city"),
+            st.session_state.get("act_area"),
+        )
+        off_pool = (st.session_state.get("activities_off") if same_region else None) \
+            or region_activities(prov, cty, area)
+        for a in off_pool:
+            if not _match(a):
                 continue
-            dist = haversine_km(school["lat"], school["lng"], a["lat"], a["lng"])
-            if _match(a):
-                off_list.append({
-                    "标题": a["标题"], "主办": a["主办"], "地址": a["地址"],
-                    "区域": a.get("区域", ""), "距离km": dist, "日期": a["日期"],
-                    "时间段": a["时间段"], "时长(小时)": a["时长"],
-                    "名额": a["名额"], "已报名": a["已报名"],
-                    "剩余名额": max(0, a["名额"] - a["已报名"]),
-                    "标签": a["标签"], "报名链接": a.get("报名链接", LINK_SH_VOL),
-                })
-        off_list.sort(key=lambda x: x["距离km"])
+            item = {
+                "标题": a["标题"], "主办": a["主办"], "地址": a["地址"],
+                "省份": a.get("省份", prov), "城市": a.get("城市", cty), "区域": a.get("区域", area),
+                "日期": a["日期"], "时间段": a["时间段"], "时长(小时)": a["时长"],
+                "名额": a["名额"], "已报名": a["已报名"],
+                "剩余名额": max(0, a["名额"] - a["已报名"]),
+                "标签": a["标签"], "类型": KIND_OFF,
+                "报名链接": a.get("报名链接", LINK_SH_VOL),
+            }
+            if same_city_as_school:      # 跨城时距离只作参考，不参与排序
+                d = _dist(a)
+                if d is not None:
+                    item["距离km"] = round(d, 1)
+            off_list.append(item)
+        if same_city_as_school:
+            off_list.sort(key=lambda x: (x.get("距离km", 99999), x["日期"]))
+        else:
+            off_list.sort(key=lambda x: x["日期"])
 
-    area_txt = district_name or "上海全市"
+    area_txt = geo.region_label(prov, cty, area)
     if not on_list and not off_list:
-        return {
-            "status": "empty",
-            "message": f"在「{school['名称']}」的{area_txt}范围内没有找到符合条件的活动"
-                       f"（关键词：{kw or '无'}）。可以换关键词或改为不限区域再试。",
-        }
+        return {"status": "empty",
+                "message": f"「{area_txt}」范围内没有找到符合条件的活动（关键词：{kw or '无'}）。"
+                           "可以换一个区县或换关键词再试。"}
 
-    cover = len({a["区域"] for a in off_list})
     parts = []
     if want_on:
         parts.append(f"校内 {len(on_list)} 个活动")
     if want_off:
-        seg = f"{area_txt}校外 {len(off_list)} 个活动"
-        if district_name == "" and off_list:
-            seg += f"，覆盖 {cover} 个区"
+        seg = f"{area_txt} 校外 {len(off_list)} 个活动"
+        if not area and off_list:
+            seg += f"，覆盖 {len({a['区域'] for a in off_list})} 个区县"
         parts.append(seg)
     msg = "；".join(parts) + "。"
-    if want_off and off_list:
-        msg += "校外已按距校区的距离由近到远排序，每个活动都附有详情与官方报名链接。"
+    if want_on and want_off:
+        msg += "校内活动来自你绑定的学校，校外活动按所在地区推送。"
+    if off_list:
+        if same_city_as_school:
+            msg += "校外活动按距校区距离由近到远排序，每个活动都附有详情与官方报名链接。"
+        elif school:
+            msg += (f"所选地区不在你校区所在城市（{school.get('城市', '')}），"
+                    "已按日期排序；每个活动都附有详情与官方报名链接。")
+        else:
+            msg += "每个活动都附有详情与官方报名链接。"
+    if not school:
+        msg += "（未绑定学校，暂无法计算距离，绑定后可按距离排序。）"
     return {
         "status": "success",
-        "school": {"名称": school["名称"], "城市": school["城市"], "校区": school["校区"]},
+        "school": ({"名称": school["名称"], "城市": school["城市"], "校区": school.get("校区", "")}
+                   if school else None),
         "area": area_txt,
+        "province": prov, "city": cty, "district": area,
+        "sort_by": "distance" if (off_list and same_city_as_school) else "date",
         "on_campus": on_list,
         "off_campus": off_list,
         "message": msg,
     }
+
 
 
 def get_bound_account():
@@ -723,8 +791,9 @@ def switch_account(acc, tip: str = ""):
 
 
 def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
-                         place: str = "", note: str = "") -> dict:
-    """工具5：为当前绑定的个人账号录入一条新的志愿记录（只需活动名称与时长）"""
+                         place: str = "", note: str = "", kind: str = "") -> dict:
+    """工具5：为当前绑定的个人账号录入一条新的志愿记录（只需活动名称与时长）。
+    kind 用于区分「校内 / 校外」，省略时按活动名称与地点自动判断。"""
     acc = get_bound_account()
     if not acc:
         return {
@@ -773,17 +842,33 @@ def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
                        f"如确需修改请先重置数据或换个日期。",
         }
 
+    kind_raw = str(kind or "").strip()
+    if kind_raw in (KIND_ON, "on", "on_campus", "校园", "校内活动"):
+        kind_val = KIND_ON
+    elif kind_raw in (KIND_OFF, "off", "off_campus", "社会", "校外活动"):
+        kind_val = KIND_OFF
+    else:   # 未指定时按关键字自动判断，默认校外
+        blob = proj + str(place or "")
+        on_words = ("图书馆", "迎新", "运动会", "校园", "校内", "实验室", "校运会", "宿舍", "教学楼")
+        kind_val = KIND_ON if any(w in blob for w in on_words) else KIND_OFF
+
     new_row = {
         "姓名": acc["姓名"],
         "学号": acc["学号"],
         "志愿项目": proj,
+        "类型": kind_val,
         "日期": date_str,
         "时长(小时)": h,
+        "地点": str(place or "").strip(),
+        "备注": str(note or "").strip(),
     }
-    st.session_state.volunteer_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    st.session_state.volunteer_df = pd.concat(
+        [df, pd.DataFrame([new_row], columns=RECORD_COLUMNS)], ignore_index=True)
 
     mine = st.session_state.volunteer_df[st.session_state.volunteer_df["姓名"] == acc["姓名"]]
     total = float(mine["时长(小时)"].sum())
+    on_h = float(mine.loc[mine["类型"] == KIND_ON, "时长(小时)"].sum())
+    off_h = float(mine.loc[mine["类型"] == KIND_OFF, "时长(小时)"].sum())
     # 数据变了，之前查到的结果与统计已过期，一并清掉，避免和新数据对不上
     st.session_state.last_records = None
     st.session_state.last_summary = None
@@ -796,15 +881,18 @@ def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
         "record": new_row,
         "personal_total": total,
         "personal_count": int(len(mine)),
-        "message": (f"已为 {acc['姓名']}（学号 {acc['学号']}）录入：{date_str} {proj} {h:g} 小时"
+        "personal_on_campus": round(on_h, 2),
+        "personal_off_campus": round(off_h, 2),
+        "message": (f"已为 {acc['姓名']}（学号 {acc['学号']}）录入：{date_str} {proj} {h:g} 小时（{kind_val}）"
                     + (f"（{extra}）" if extra else "")
-                    + f"。该同学累计志愿 {total:.1f} 小时，共 {len(mine)} 条记录。"),
+                    + f"。累计志愿 {total:.1f} 小时（校内 {on_h:g} + 校外 {off_h:g}），共 {len(mine)} 条记录。"),
     }
 
 
 TOOL_IMPL = {
     "query_volunteer_data": query_volunteer_data,
     "calc_total_hours": calc_total_hours,
+    "calc_hours_by_type": calc_hours_by_type,
     "export_volunteer_excel": export_volunteer_excel,
     "query_open_activities": query_open_activities,
     "add_volunteer_record": add_volunteer_record,
@@ -816,7 +904,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_volunteer_data",
-            "description": "按起止日期查询校园志愿记录；可通过可选参数 project_name 按志愿项目名称关键字筛选，通过 scope 指定查本人还是全员。",
+            "description": "按起止日期查询校园志愿记录；可用 project_name 按项目名筛选，用 scope 指定本人或全员，用 kind 只看校内或校外。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -826,7 +914,12 @@ TOOLS_SCHEMA = [
                     "scope": {
                         "type": "string",
                         "enum": ["me", "all"],
-                        "description": "查询口径：me 只查当前登录账号本人的记录（默认）；all 查全部成员记录。用户说“每个人/全员/全班/所有同学”时传 all",
+                        "description": "查询口径：me 只查当前登录账号本人的记录（默认）；all 查全部成员。用户说“每个人/全员/全班”时传 all",
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["校内", "校外"],
+                        "description": "可选。只看某一类记录：校内 / 校外；不传则两类都查",
                     },
                 },
                 "required": ["start_date", "end_date"],
@@ -837,7 +930,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "calc_total_hours",
-            "description": "对最近查询到的志愿记录按姓名分组，统计每人累计志愿总时长与参与次数。调用前需先执行 query_volunteer_data；通常不需要传 records，工具会自动使用最近一次查询结果。",
+            "description": "对最近查询到的记录按姓名分组，统计每人累计总时长、校内时长、校外时长与参与次数。调用前需先执行 query_volunteer_data；通常不传 records，工具自动使用最近一次查询结果。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -846,6 +939,25 @@ TOOLS_SCHEMA = [
                         "description": "可选。要统计的记录数组；一般省略，省略时自动使用最近一次查询结果",
                         "items": {"type": "object"},
                     }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calc_hours_by_type",
+            "description": "把志愿时长拆成校内 / 校外 / 总计三个口径并给出占比与各项目明细。用户问“我校内多少小时”“校内外分别多少”“总时长多少”时调用；不需要先查询，工具直接读当前账号数据。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope": {
+                        "type": "string",
+                        "enum": ["me", "all"],
+                        "description": "统计口径：me 当前账号本人（默认） / all 全员合计",
+                    },
+                    "start_date": {"type": "string", "description": "可选。起始日期 YYYY-MM-DD，只看某段时间"},
+                    "end_date": {"type": "string", "description": "可选。结束日期 YYYY-MM-DD"},
                 },
             },
         },
@@ -871,22 +983,30 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_open_activities",
-            "description": "查询志愿活动：绑定学校的校内活动列表，以及上海全市的校外志愿活动（按距校区距离由近到远，含详细地址、所属区、报名链接）。需要用户已绑定学校；未绑定时提示先去绑定。",
+            "description": "查询志愿活动：绑定学校的校内活动，以及全国任意省市区县的校外志愿活动（含地址、区县、报名链接）。用户提到某个省份/城市/区县（如“成都武侯区有什么志愿活动”）时，把地名填进 province / city / district；只提到城市或区县也可以，省份会自动反查。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "scope": {
                         "type": "string",
                         "enum": ["all", "on_campus", "off_campus"],
-                        "description": "查询范围：all 全部 / on_campus 仅校内 / off_campus 仅校外（上海全市）",
+                        "description": "查询范围：all 全部 / on_campus 仅校内 / off_campus 仅校外",
+                    },
+                    "province": {
+                        "type": "string",
+                        "description": "可选。省级行政区，如 上海市、四川省、广东省；不传则用页面当前选择的地区",
+                    },
+                    "city": {
+                        "type": "string",
+                        "description": "可选。城市，如 成都市、南京市；不传则用页面当前选择的城市",
                     },
                     "district": {
                         "type": "string",
-                        "description": "可选。限定上海某个区，如 浦东新区、徐汇区；不传则返回上海全市的校外活动",
+                        "description": "可选。区县，如 武侯区、浦东新区；不传则用页面当前选择的区县",
                     },
                     "keyword": {
                         "type": "string",
-                        "description": "可选。按标题、主办方或标签过滤，例如 科普、助老、环保",
+                        "description": "可选。按标题、主办方、标签或分类过滤，例如 科普、助老、环保、支教",
                     },
                 },
             },
@@ -916,6 +1036,11 @@ TOOLS_SCHEMA = [
                         "type": "string",
                         "description": "可选。服务地点，例如 浦东新区金桥镇社区服务中心",
                     },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["校内", "校外"],
+                        "description": "可选。这条记录属于校内还是校外志愿服务；用户说“在学校里/校内的活动”传校内，社区、场馆、地铁等社会活动传校外",
+                    },
                     "note": {
                         "type": "string",
                         "description": "可选。备注，例如 含往返交通、由院系统一组织",
@@ -926,6 +1051,7 @@ TOOLS_SCHEMA = [
         },
     },
 ]
+
 
 
 def add_log(tool_name: str, args: dict, result: dict):
@@ -1223,8 +1349,67 @@ GLOBAL_CSS = """
   .stat-value { font-size: 26px; font-weight: 800; color: #1E3A5F; margin-top: 8px; }
   .stat-unit { font-size: 12px; color: #A0AEC0; font-weight: 400; }
   .stat-hint { font-size: 11px; color: #2B6CB0; margin-top: 8px; font-weight: 600; }
+  /* 总时长卡：最醒目的一张 —— 深蓝渐变 + 更大字号 + 校内/校外占比条 */
+  .stat-card.hero {
+    background: linear-gradient(135deg, #16305A 0%, #2563EB 62%, #3B82F6 100%);
+    border: none; color: #fff;
+    box-shadow: 0 12px 28px rgba(37,99,235,.30);
+    position: relative; overflow: hidden;
+  }
+  .stat-card.hero::after {
+    content: ""; position: absolute; right: -2.2rem; top: -2.2rem;
+    width: 8rem; height: 8rem; border-radius: 50%; background: rgba(255,255,255,.08);
+  }
+  .stat-card.hero .stat-label { color: #D7E4FF; font-weight: 700; letter-spacing: .02em; }
+  .stat-card.hero .stat-icon { background: rgba(255,255,255,.18); }
+  .stat-card.hero .stat-value { color: #fff; font-size: 42px; line-height: 1.05; letter-spacing: -.02em; }
+  .stat-card.hero .stat-unit { color: #C7DAFF; font-size: 15px; font-weight: 600; }
+  .stat-card.hero .stat-hint { color: #C7DAFF; font-weight: 600; }
+  .hero-bar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; margin-top: 10px; background: rgba(255,255,255,.22); }
+  .hero-bar i { display: block; height: 100%; }
+  .hero-bar .on { background: #7DD3FC; }
+  .hero-bar .off { background: #FBBF24; }
+  .hero-legend { display: flex; gap: 12px; font-size: 11px; color: #D7E4FF; margin-top: 6px; font-weight: 600; }
+  .hero-legend b { color: #fff; }
+  .kind-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
   .rec-card { cursor: pointer; transition: box-shadow .2s ease, transform .2s ease; }
   .rec-card:hover { box-shadow: 0 6px 18px rgba(43,108,176,.18); transform: translateY(-2px); }
+  /* 明细面板：总计 / 校内 / 校外三段小卡 */
+  .split-summary { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
+  .split-summary > div {
+    flex: 1; min-width: 130px; background: #fff; border: 1px solid #E6ECF3;
+    border-radius: 10px; padding: 8px 12px; font-size: 12px; color: #4A5568;
+  }
+  .split-summary b { font-size: 18px; color: #1E3A5F; margin: 0 3px; }
+  .split-summary .on { border-left: 4px solid #0EA5E9; }
+  .split-summary .off { border-left: 4px solid #F59E0B; }
+  /* 活动中心筛选条 */
+  .filter-bar {
+    background: linear-gradient(180deg,#F7FAFF,#EEF4FF); border: 1px solid #DDE8FA;
+    border-radius: 12px; padding: 10px 14px 2px; margin: 2px 0 6px;
+  }
+  .crumb {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #fff; border: 1px solid #E3ECFA; border-radius: 10px;
+    padding: 8px 12px; font-size: 12.5px; color: #334155; margin-bottom: 8px;
+  }
+  .crumb b { color: #1D4ED8; }
+  .crumb .res { margin-left: auto; font-weight: 700; color: #0F766E; }
+  .crumb .chip-scope {
+    padding: 2px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 700;
+  }
+  .crumb .chip-scope.on { background: #E0F2FE; color: #0369A1; }
+  .crumb .chip-scope.off { background: #FEF3C7; color: #B45309; }
+  .crumb .chip-scope.all { background: #EDE9FE; color: #6D28D9; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; font-weight: 800;
+    margin: 10px 0 8px; padding-left: 9px; border-left: 4px solid #38A169; color: #1A202C;
+  }
+  .sec-head.off { border-left-color: #DD6B20; }
+  .sec-head span { font-size: 11.5px; font-weight: 600; color: #718096; }
+  .kind-chip { font-size: 10px; font-weight: 800; border-radius: 4px; padding: 1px 6px; }
+  .kind-chip.on { background: #E0F2FE; color: #0369A1; }
+  .kind-chip.off { background: #FEF3C7; color: #B45309; }
   /* 「志愿记录总数」整卡可点：透明按钮覆盖在卡片上层，浏览器需支持 :has */
   div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child {
     position: relative;
@@ -1549,7 +1734,7 @@ def render_header():
           <div class="hero-sub">绑定个人账号，一句话完成：登记志愿 · 查询记录 · 统计时长 · 导出 Excel · 发现活动</div>
           <div>
             <span class="badge">🤖 {MODEL_NAME}</span>
-            <span class="badge">🛠️ 5 个业务工具</span>
+            <span class="badge">🛠️ 6 个业务工具</span>
             <span class="badge">👤 个人账号绑定</span>
             <span class="badge">🧾 工具调用日志</span>
             <span class="badge">📊 自动可视化</span>
@@ -1570,25 +1755,32 @@ def my_records_df():
 
 
 def render_stats():
-    """顶部 KPI：只保留两张卡，始终跟随当前绑定账号的本人记录——
-    录入新记录、切换账号后，这里的数字都会即时更新；不受「显示全部成员」开关影响"""
+    """顶部 KPI：记录总数（整卡可点开明细）+ 醒目的累计总时长 + 校内 / 校外分项。
+    四张卡都只跟随当前绑定账号本人的记录，录入或切换账号后同一轮渲染即更新。"""
     mine = my_records_df()
     acc = get_bound_account()
     n = len(mine)
-    hrs = float(mine["时长(小时)"].sum()) if n else 0.0
+    total = on_h = off_h = 0.0
+    on_n = off_n = 0
+    if n:
+        hours = pd.to_numeric(mine["时长(小时)"], errors="coerce").fillna(0)
+        total = float(hours.sum())
+        on_mask = mine["类型"] == KIND_ON
+        on_h = float(hours[on_mask].sum())
+        off_h = float(hours[~on_mask].sum())
+        on_n = int(on_mask.sum())
+        off_n = int((~on_mask).sum())
+    on_pct = (on_h / total * 100) if total else 0.0
+    off_pct = 100 - on_pct if total else 0.0
 
-    rec_label = f"{acc['姓名']}的志愿记录" if acc else "志愿记录总数"
-    rec_hint = (
-        '<div class="stat-hint">👁 点击本卡片，查看我的每一项志愿记录</div>' if acc
-        else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后这里会显示本人的记录</div>'
-    )
-    hrs_hint = (
-        f'<div class="stat-hint" style="color:#DD6B20;">共 {n} 条记录累计 · 随录入实时更新</div>' if acc
-        else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后显示本人的累计时长</div>'
-    )
+    c1, c2, c3, c4 = st.columns([1.0, 1.28, 1.0, 1.0], gap="small")
 
-    cols = st.columns(2, gap="medium")
-    with cols[0]:
+    with c1:
+        rec_label = f"{acc['姓名']}的记录" if acc else "志愿记录总数"
+        rec_hint = (
+            '<div class="stat-hint">👁 点本卡查看每一项记录</div>' if acc
+            else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后显示本人记录</div>'
+        )
         st.markdown(
             f"""
             <div class="stat-card rec-card">
@@ -1603,19 +1795,54 @@ def render_stats():
             unsafe_allow_html=True,
         )
         # 透明热区按钮：让整张卡片可点击（老浏览器下退化为普通按钮，功能不受影响）
-        clicked = st.button(
-            "🔍 查看我的志愿记录明细", key="open_my_records", use_container_width=True,
+        clicked = st.button("🔍 查看我的志愿记录明细", key="open_my_records", use_container_width=True)
+
+    with c2:
+        st.markdown(
+            f"""
+            <div class="stat-card hero">
+              <div class="stat-top">
+                <span class="stat-icon">⏱</span>
+                <span class="stat-label">{"我的累计志愿总时长" if acc else "累计志愿总时长"}</span>
+              </div>
+              <div class="stat-value">{total:.1f} <span class="stat-unit">小时</span></div>
+              <div class="hero-bar">
+                <i class="on" style="width:{on_pct:.1f}%"></i><i class="off" style="width:{off_pct:.1f}%"></i>
+              </div>
+              <div class="hero-legend">
+                <span><span class="kind-dot" style="background:#7DD3FC"></span>校内 <b>{on_h:.1f}h</b></span>
+                <span><span class="kind-dot" style="background:#FBBF24"></span>校外 <b>{off_h:.1f}h</b></span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-    with cols[1]:
+
+    with c3:
         st.markdown(
             f"""
             <div class="stat-card">
               <div class="stat-top">
-                <span class="stat-icon" style="background:#FFFAF0;">⏳</span>
-                <span class="stat-label">{"我的累计志愿时长" if acc else "累计志愿时长"}</span>
+                <span class="stat-icon" style="background:#E6F6FF;">🏫</span>
+                <span class="stat-label">校内志愿时长</span>
               </div>
-              <div class="stat-value">{hrs:.1f} <span class="stat-unit">小时</span></div>
-              {hrs_hint}
+              <div class="stat-value">{on_h:.1f} <span class="stat-unit">小时</span></div>
+              <div class="stat-hint" style="color:#0369A1;">{on_n} 条 · 占 {on_pct:.0f}%</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c4:
+        st.markdown(
+            f"""
+            <div class="stat-card">
+              <div class="stat-top">
+                <span class="stat-icon" style="background:#FFF7E6;">🌆</span>
+                <span class="stat-label">校外志愿时长</span>
+              </div>
+              <div class="stat-value">{off_h:.1f} <span class="stat-unit">小时</span></div>
+              <div class="stat-hint" style="color:#B45309;">{off_n} 条 · 占 {off_pct:.0f}%</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1626,35 +1853,64 @@ def render_stats():
         st.rerun()
 
     if not acc:
-        st.caption("⚠️ 尚未绑定个人账号：在左侧「个人账号」选择或新建并绑定后，这两张卡片即显示本人数据。")
+        st.caption("⚠️ 尚未绑定个人账号：在左侧「个人账号」选择或新建并绑定后，四张卡片即显示本人数据。")
     elif st.session_state.get("show_all_rows"):
-        st.caption("左侧数据表当前按「全员」口径展示；顶部两张卡片始终显示本人数据，与账号同步切换。")
+        st.caption("左侧数据表当前按「全员」口径展示；顶部四张卡片始终显示本人数据，与账号同步切换。")
+
 
 
 def render_my_records_detail():
-    """点开「志愿记录总数」卡片后的明细面板：本人每一项志愿记录逐条可查"""
+    """点开「志愿记录总数」卡片后的明细面板：可按全部 / 校内 / 校外切换查看"""
     acc = get_bound_account()
     if not acc:
         return
     mine = my_records_df()
-    _panel_title("📋", "#2B6CB0", f"{acc['姓名']}的志愿记录明细", "每一项记录 · 按日期由近到远")
+    _panel_title("📋", "#2B6CB0", f"{acc['姓名']}的志愿记录明细",
+                 "每一项记录 · 按日期由近到远 · 可切换校内 / 校外")
+
     if mine.empty:
         st.markdown(
             '<div class="empty-box"><span class="big">📝</span>'
             "你名下还没有志愿记录<br>在左侧「录入我的志愿记录」或直接对话登记第一条吧</div>",
             unsafe_allow_html=True,
         )
-    else:
-        total = float(mine["时长(小时)"].sum())
-        latest = mine.iloc[0]
-        st.caption(
-            f"共 {len(mine)} 条 · 合计 {total:.1f} 小时 · 最近一次："
-            f"{latest['日期']} {latest['志愿项目']} {latest['时长(小时)']:g} 小时"
-        )
-        st.dataframe(mine, use_container_width=True, hide_index=True)
+        if st.button("🔼 收起明细", key="close_my_records", use_container_width=True):
+            st.session_state.show_my_records = False
+            st.rerun()
+        return
+
+    hours = pd.to_numeric(mine["时长(小时)"], errors="coerce").fillna(0)
+    on_mask = mine["类型"] == KIND_ON
+    total, on_h, off_h = float(hours.sum()), float(hours[on_mask].sum()), float(hours[~on_mask].sum())
+
+    pick = st.radio(
+        "查看范围", ["全部", KIND_ON, KIND_OFF],
+        index=["全部", KIND_ON, KIND_OFF].index(st.session_state.get("detail_kind", "全部")),
+        horizontal=True, key="detail_kind_radio", label_visibility="collapsed",
+    )
+    st.session_state.detail_kind = pick
+    view = mine if pick == "全部" else mine[mine["类型"] == pick]
+
+    st.markdown(
+        f"""
+        <div class="split-summary">
+          <div><span>总计</span><b>{total:.1f}</b> 小时 · {len(mine)} 条</div>
+          <div class="on"><span>🏫 校内</span><b>{on_h:.1f}</b> 小时 · {int(on_mask.sum())} 条</div>
+          <div class="off"><span>🌆 校外</span><b>{off_h:.1f}</b> 小时 · {int((~on_mask).sum())} 条</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(f"当前显示：{pick} · {len(view)} 条 · 合计 "
+               f"{float(pd.to_numeric(view['时长(小时)'], errors='coerce').fillna(0).sum()):.1f} 小时")
+    st.dataframe(
+        view[["日期", "志愿项目", "类型", "时长(小时)", "地点", "备注"]],
+        use_container_width=True, hide_index=True, height=250,
+    )
     if st.button("🔼 收起明细", key="close_my_records", use_container_width=True):
         st.session_state.show_my_records = False
         st.rerun()
+
 
 
 def _panel_title(icon, dot_color, text, hint=""):
@@ -1711,17 +1967,25 @@ def render_chart():
         )
         return
     df = pd.DataFrame(st.session_state.last_summary)
-    fig = px.bar(
-        df,
-        x="姓名",
-        y="总时长(小时)",
-        color="姓名",
-        text="总时长(小时)",
-        color_discrete_sequence=["#4299E1", "#48BB78", "#ED8936", "#9F7AEA", "#38B2AC", "#F6AD55"],
-    )
-    fig.update_traces(texttemplate="%{y}", textposition="outside")
+    if "校内(小时)" in df.columns and "校外(小时)" in df.columns:
+        # 统计结果带校内外拆分：画堆叠柱，一眼看出每人校内 / 校外各占多少
+        long = df.melt(id_vars="姓名", value_vars=["校内(小时)", "校外(小时)"],
+                       var_name="类型", value_name="小时")
+        long["类型"] = long["类型"].str.replace("(小时)", "", regex=False)
+        fig = px.bar(
+            long, x="姓名", y="小时", color="类型", text="小时", barmode="stack",
+            color_discrete_map={"校内": "#38BDF8", "校外": "#FBBF24"},
+        )
+        fig.update_traces(texttemplate="%{y:g}", textposition="inside")
+        fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, title=""))
+    else:
+        fig = px.bar(
+            df, x="姓名", y="总时长(小时)", color="姓名", text="总时长(小时)",
+            color_discrete_sequence=["#4299E1", "#48BB78", "#ED8936", "#9F7AEA", "#38B2AC", "#F6AD55"],
+        )
+        fig.update_traces(texttemplate="%{y}", textposition="outside")
     fig.update_layout(
-        showlegend=False,
+        showlegend=bool("类型" in df.columns or "校内(小时)" in df.columns),
         height=330,
         margin=dict(l=10, r=10, t=24, b=10),
         plot_bgcolor="rgba(0,0,0,0)",
@@ -1754,10 +2018,13 @@ def render_download():
 
 # ============================ 个人账号绑定 ============================
 def account_stats(acc):
-    """返回 (我的记录数, 我的累计时长)"""
+    """返回 (我的记录数, 我的累计时长, 校内时长, 校外时长)"""
     df = st.session_state.volunteer_df
     mine = df[df["姓名"] == acc["姓名"]]
-    return len(mine), float(mine["时长(小时)"].sum()) if len(mine) else 0.0
+    hours = pd.to_numeric(mine["时长(小时)"], errors="coerce").fillna(0)
+    return (len(mine), float(hours.sum()),
+            float(hours[mine["类型"] == KIND_ON].sum()),
+            float(hours[mine["类型"] != KIND_ON].sum()))
 
 
 def _do_create_account():
@@ -1818,7 +2085,7 @@ def render_account_bind():
     if not acc:
         st.caption("⚠️ 未绑定账号：无法录入自己的志愿记录")
         return
-    cnt, hrs = account_stats(acc)
+    cnt, hrs, on_h, off_h = account_stats(acc)
     sub = " · ".join([x for x in [acc.get("学院", ""), acc.get("专业", "")] if x]) or "未填写院系信息"
     st.markdown(
         f"""
@@ -1827,7 +2094,7 @@ def render_account_bind():
           <div class="ac-main">
             <div class="ac-name">{acc["姓名"]}<span class="ac-id">学号 {acc["学号"]}</span></div>
             <div class="ac-sub">{sub}</div>
-            <div class="ac-kpi">已录 <b>{cnt}</b> 条 · 累计 <b>{hrs:.1f}</b> 小时</div>
+            <div class="ac-kpi">已录 <b>{cnt}</b> 条 · 总 <b>{hrs:.1f}</b>h · 校内 <b>{on_h:.1f}</b>h · 校外 <b>{off_h:.1f}</b>h</div>
           </div>
         </div>
         """,
@@ -1858,9 +2125,8 @@ def render_account_strip():
         )
         return
 
-    cnt, hrs = account_stats(acc)
+    cnt, hrs, on_h, off_h = account_stats(acc)
     df = st.session_state.volunteer_df
-    avg = hrs / cnt if cnt else 0.0
     sub = " · ".join([x for x in [acc.get("学院", ""), acc.get("专业", "")] if x]) or "未填写院系信息"
     st.markdown(
         f"""
@@ -1875,9 +2141,9 @@ def render_account_strip():
           </div>
           <div class="as-right">
             <div><b>{cnt}</b><span>我的记录</span></div>
-            <div><b>{hrs:.1f}</b><span>我的累计时长</span></div>
-            <div><b>{avg:.1f}</b><span>单次平均时长</span></div>
-            <div><b>{len(df)}</b><span>全员记录</span></div>
+            <div><b>{hrs:.1f}</b><span>我的总时长</span></div>
+            <div><b>{on_h:.1f}</b><span>校内时长</span></div>
+            <div><b>{off_h:.1f}</b><span>校外时长</span></div>
           </div>
         </div>
         """,
@@ -1887,51 +2153,106 @@ def render_account_strip():
 
 # ============================ 学校绑定 / 活动中心 ============================
 def render_school_bind():
-    """侧栏：绑定、切换、解除学校"""
+    """侧栏：按「省份 → 城市 → 学校」三级选择绑定学校（收录全国 1309 所本科高校）"""
     st.markdown("**🏫 学校绑定**")
-    names = [s["名称"] for s in SCHOOLS]
     cur = st.session_state.get("bound_school")
-    idx = names.index(cur["名称"]) if cur and cur["名称"] in names else 0
-    pick = st.selectbox("选择学校", names, index=idx, key="school_picker")
+    provs = geo.school_provinces()
+
+    cur_prov = (cur or {}).get("省份") if (cur or {}).get("省份") in provs else provs[0]
+    prov = st.selectbox("① 省份 / 直辖市", provs, index=provs.index(cur_prov), key="sch_prov")
+    if st.session_state.get("_sch_prov_prev") != prov:
+        st.session_state["_sch_prov_prev"] = prov
+        for k in ("sch_city", "sch_pick"):
+            st.session_state.pop(k, None)
+
+    cities = ["全部城市"] + geo.school_cities(prov)
+    cur_city = (cur or {}).get("城市") if (cur or {}).get("城市") in cities else "全部城市"
+    city = st.selectbox("② 城市", cities, index=cities.index(cur_city), key="sch_city")
+    city_arg = "" if city == "全部城市" else city
+
+    kw = st.text_input("③ 搜索学校（可留空）", value="", key="sch_kw",
+                       placeholder="输入校名关键字，如 复旦 / 杉达 / 师范").strip()
+    pool = geo.schools_in(prov, city_arg, kw)
+    if not pool:
+        st.caption(f"没有匹配「{kw}」的学校，换个关键字或改选「全部城市」。")
+        return
+
+    names = [s["名称"] for s in pool]
+    idx = 0
+    if cur and cur.get("名称") in names:
+        idx = names.index(cur["名称"])
+    pick = st.selectbox(f"④ 选择学校（共 {len(names)} 所）", names, index=idx, key="sch_pick")
 
     c1, c2 = st.columns(2)
     if c1.button("绑定 / 切换", use_container_width=True, key="bind_btn"):
-        school = next(s for s in SCHOOLS if s["名称"] == pick)
-        st.session_state.bound_school = dict(school)
+        school = dict(geo.SCHOOL_BY_NAME[pick])
+        st.session_state.bound_school = school
+        st.session_state.activities_on = school_activities(school)
+        # 活动地区跟着学校走，避免“绑了成都的学校却还在看上海的校外活动”
+        st.session_state.act_prov = school.get("省份") or provs[0]
+        st.session_state.act_city = school.get("城市") or ""
+        st.session_state.act_area = school.get("区") or ""
+        for k in ("sel_prov", "sel_city", "sel_area", "sch_pick", "sch_city"):
+            st.session_state.pop(k, None)
+        st.session_state.pool_key = None
+        st.session_state.feed_tick_at = None
         st.session_state.toast = (
             "success",
-            f"已绑定 {school['名称']}（{school['城市']} · {school['校区']}）",
+            f"已绑定 {school['名称']}（{school.get('省份','')}·{school.get('城市','')}），"
+            "活动地区已同步切换。",
         )
         st.rerun()
     if c2.button("解除绑定", use_container_width=True, key="unbind_btn"):
         st.session_state.bound_school = None
+        st.session_state.activities_on = []
         st.session_state.toast = ("success", "已解除学校绑定。")
         st.rerun()
 
     if cur:
-        addr = cur.get("地址", "")
+        tags = "".join(f" · {t}" for t in cur.get("标签", [])[:2])
         st.markdown(
             f'<div class="school-chip">✅ {cur["名称"]}'
-            f'<span>{cur["城市"]} · {cur["校区"]}{" · " + addr if addr else ""} · {cur["lat"]:.3f}, {cur["lng"]:.3f}</span></div>',
+            f'<span>{cur.get("省份","")} · {cur.get("城市","")} · {cur.get("区","")}{tags}</span>'
+            f'<span>{cur.get("地址","")}</span></div>',
             unsafe_allow_html=True,
         )
         if cur.get("官网"):
             st.caption(f"学校官网：{cur['官网']}")
     else:
-        st.caption("⚠️ 未绑定：校内活动与校外推送不可用")
+        st.caption("⚠️ 未绑定：校内活动不可用，校外活动仍可按地区浏览")
+
 
 
 def render_school_strip():
-    """顶部：学校绑定状态条"""
+    """顶部：学校 + 当前活动地区状态条（一眼看清「绑了哪所学校、在看哪个地区」）"""
     cur = st.session_state.get("bound_school")
+    prov = st.session_state.get("act_prov", "")
+    city = st.session_state.get("act_city", "")
+    area = st.session_state.get("act_area", "")
+    region_txt = geo.region_label(prov, city, area) if prov else "未选择地区"
+    if not area and city:
+        region_txt = f"{city}（全市）"
+
+    on_n = len(st.session_state.get("activities_on") or [])
+    off_list = st.session_state.get("activities_off") or []
+    off_n = len(off_list)
+    areas_n = len({a.get("区域") for a in off_list if a.get("区域")})
+    dists = ([geo.haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"])
+              for a in off_list if a.get("lat") and cur.get("lat")] if cur else [])
+    near = f"{min(dists):.1f} km" if dists else "—"
+
     if not cur:
         st.markdown(
-            """
+            f"""
             <div class="school-strip unbound">
               <div class="ss-left">
                 <span class="ss-label">未绑定学校</span>
-                <span class="ss-name">绑定后可查看校内实时活动与上海全市校外推送</span>
-                <span class="ss-sub">入口：左侧边栏「学校绑定」→ 选择学校 → 点击「绑定 / 切换」</span>
+                <span class="ss-name">当前浏览：{region_txt} 的校外活动</span>
+                <span class="ss-sub">左侧「学校绑定」→ 省份 → 城市 → 学校 → 绑定，绑定后即可看校内活动与距离</span>
+              </div>
+              <div class="ss-right">
+                <div><b>{off_n}</b><span>校外活动</span></div>
+                <div><b>{areas_n}</b><span>覆盖区县</span></div>
               </div>
             </div>
             """,
@@ -1939,32 +2260,25 @@ def render_school_strip():
         )
         return
 
-    on_n = len(st.session_state.activities_on)
-    off_n = len(st.session_state.activities_off)
-    dists = [
-        haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"])
-        for a in st.session_state.activities_off
-    ]
-    near = f"{min(dists):.1f} km" if dists else "—"
-    areas = len({a.get("区域") for a in st.session_state.activities_off if a.get("区域")})
     st.markdown(
         f"""
         <div class="school-strip">
           <div class="ss-left">
             <span class="ss-label">已绑定学校</span>
             <span class="ss-name">{cur["名称"]}</span>
-            <span class="ss-sub">{cur["城市"]} · {cur["校区"]} · {cur.get("地址", "")} · 坐标 {cur["lat"]:.4f}, {cur["lng"]:.4f}</span>
+            <span class="ss-sub">{cur.get("省份","")} · {cur.get("城市","")} · {cur.get("区","")} · {cur.get("地址","")}</span>
           </div>
           <div class="ss-right">
+            <div><b>{region_txt}</b><span>当前活动地区</span></div>
             <div><b>{on_n}</b><span>校内活动</span></div>
-            <div><b>{off_n}</b><span>上海全市校外</span></div>
-            <div><b>{areas}</b><span>覆盖区数</span></div>
-            <div><b>{near}</b><span>最近校外活动</span></div>
+            <div><b>{off_n}</b><span>校外活动</span></div>
+            <div><b>{near}</b><span>最近校外</span></div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
 
 
 def render_activity_detail(a: dict, kind: str, dist: float = None):
@@ -2017,11 +2331,13 @@ def render_activity_card(a: dict, kind: str, dist: float = None):
     region_html = (
         f'<span class="act-region">{a["区域"]}</span>' if kind == "off" and a.get("区域") else ""
     )
+    kind_chip = (f'<span class="kind-chip {"on" if kind == "on" else "off"}">'
+                 f'{"🏫 校内" if kind == "on" else "🌆 校外"}</span>')
     st.markdown(
         f"""
         <div class="act-card {kind}">
           <div class="act-head">
-            <span class="act-title">{a["标题"]}</span>{new_html}{full_html}{region_html}
+            <span class="act-title">{a["标题"]}</span>{kind_chip}{new_html}{full_html}{region_html}
             <span class="act-hours">{a["时长"]:g} h</span>
           </div>
           <div class="act-meta">{a["主办"]} · {place_label}：{place}</div>
@@ -2042,104 +2358,181 @@ def render_activity_card(a: dict, kind: str, dist: float = None):
         render_activity_detail(a, kind, dist)
 
 
-def render_activities():
-    """活动中心：校内实时活动 + 上海全市校外推送（含详情与报名链接）"""
-    _panel_title("🏫", "#0D9488", "志愿活动中心", "校内实时更新 · 上海全市校外推送 · 详情可展开 · 一键报名")
-    cur = st.session_state.get("bound_school")
-    if not cur:
-        st.markdown(
-            '<div class="empty-box"><span class="big">🏫</span>'
-            "尚未绑定学校<br>请先在左侧边栏「学校绑定」中选择并绑定学校</div>",
-            unsafe_allow_html=True,
-        )
-        return
+def _ensure_region_pool():
+    """地区变化后重建校外活动池（只在地区真的变了时才重建）"""
+    key = (st.session_state.act_prov, st.session_state.act_city, st.session_state.act_area)
+    if st.session_state.get("pool_key") != key or not st.session_state.get("activities_off"):
+        st.session_state.activities_off = region_activities(*key)
+        st.session_state.pool_key = key
+        st.session_state.new_push = None
 
-    c1, c2, c3 = st.columns([0.9, 1.3, 2.0])
-    auto = c2.toggle("自动刷新", value=True, key="feed_auto")
-    if auto:
-        tick_feed()  # 时间驱动的模拟实时更新（25 秒节流）
-    if c1.button("🔄 刷新活动", use_container_width=True, key="refresh_feed"):
+
+def render_activities():
+    """活动中心：全国省 / 市 / 区县三级筛选 + 校内校外一键切换"""
+    _panel_title("🏫", "#0D9488", "志愿活动中心",
+                 "全国省市 + 区县筛选 · 校内 / 校外分开展示 · 详情可展开 · 一键报名")
+    school = st.session_state.get("bound_school")
+    provs = geo.provinces()
+
+    # ---------------- 筛选条：省份 → 城市 → 区县 ----------------
+    f1, f2, f3, f4 = st.columns([1.15, 1.15, 1.15, 0.9])
+    cur_prov = st.session_state.act_prov if st.session_state.act_prov in provs else provs[0]
+    prov = f1.selectbox("省份 / 直辖市 / 自治区", provs,
+                        index=provs.index(cur_prov), key="sel_prov")
+    if prov != st.session_state.act_prov:
+        st.session_state.act_prov = prov
+        st.session_state.act_city = ""
+        st.session_state.act_area = ""
+        for k in ("sel_city", "sel_area"):
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    city_list = geo.cities(prov)
+    cur_city = st.session_state.act_city if st.session_state.act_city in city_list else city_list[0]
+    city = f2.selectbox("城市", city_list, index=city_list.index(cur_city), key="sel_city")
+    if city != st.session_state.act_city:
+        st.session_state.act_city = city
+        st.session_state.act_area = ""
+        st.session_state.pop("sel_area", None)
+        st.rerun()
+
+    area_opts = ["全部区县"] + geo.areas(prov, city)
+    cur_area = st.session_state.act_area if st.session_state.act_area in area_opts else "全部区县"
+    area_pick = f3.selectbox("区县", area_opts, index=area_opts.index(cur_area), key="sel_area")
+    area = "" if area_pick == "全部区县" else area_pick
+    if area != st.session_state.act_area:
+        st.session_state.act_area = area
+        st.rerun()
+    if f4.button("🔄 刷新活动", use_container_width=True, key="refresh_feed"):
         tick_feed(force=True)
         st.session_state.toast = ("success", "活动列表已更新。")
         st.rerun()
-    last = st.session_state.get("feed_tick_at")
-    c3.caption(
-        "最近更新：" + (last.strftime("%H:%M:%S") if last else "—") + "　（活动数据为模拟实时流）"
+
+    _ensure_region_pool()
+
+    # ---------------- 第二行：范围切换 + 关键字 ----------------
+    g1, g2, g3 = st.columns([1.9, 2.1, 0.8])
+    scope = g1.radio("活动范围", ["全部", "校内", "校外"],
+                     index=["全部", "校内", "校外"].index(st.session_state.act_scope),
+                     horizontal=True, key="sel_scope")
+    st.session_state.act_scope = scope
+    kw = g2.text_input("关键字", value=st.session_state.act_kw, key="act_kw_input",
+                       placeholder="按标题 / 主办 / 标签过滤，如 科普 · 助老 · 环保 · 支教").strip()
+    st.session_state.act_kw = kw
+    if g3.button("↩️ 回到本校", use_container_width=True, key="reset_region"):
+        if school:
+            st.session_state.act_prov = school.get("省份") or provs[0]
+            st.session_state.act_city = school.get("城市") or ""
+            st.session_state.act_area = school.get("区") or ""
+        st.session_state.act_scope = "全部"
+        st.session_state.act_kw = ""
+        for k in ("sel_prov", "sel_city", "sel_area", "sel_scope", "act_kw_input"):
+            st.session_state.pop(k, None)
+        st.session_state.pool_key = None
+        st.rerun()
+
+    want_on = scope in ("全部", "校内")
+    want_off = scope in ("全部", "校外")
+
+    def _hit(a):
+        if not kw:
+            return True
+        return kw in (a["标题"] + a["主办"] + "".join(a.get("标签", [])) + a.get("分类", ""))
+
+    on_items = [a for a in (st.session_state.activities_on if want_on else []) if _hit(a)]
+    on_items.sort(key=lambda x: x["日期"])
+    # 只有所选地区与校区同城时才按距离排序；跨市距离没有参考价值，改按日期
+    school_city = geo.full_city(school.get("省份", ""), school.get("城市", "")) if school else ""
+    same_city = bool(school_city) and school_city == city
+    off_rows = []
+    if want_off:
+        for a in st.session_state.activities_off:
+            if not _hit(a):
+                continue
+            d = (geo.haversine_km(school["lat"], school["lng"], a["lat"], a["lng"])
+                 if same_city and school.get("lat") and a.get("lat") else None)
+            off_rows.append((d, a))
+        off_rows.sort(key=lambda x: (x[0] if x[0] is not None else 99999, x[1]["日期"]))
+
+    total_n = len(on_items) + len(off_rows)
+    scope_cls = {"全部": "all", "校内": "on", "校外": "off"}[scope]
+    scope_ico = {"全部": "📋", "校内": "🏫", "校外": "🌆"}[scope]
+    area_txt = geo.region_label(prov, city, area) if area else f"{city}（全市）"
+    kw_txt = f" · 关键字「{kw}」" if kw else ""
+    st.markdown(
+        f"""
+        <div class="crumb">
+          <span class="chip-scope {scope_cls}">{scope_ico} {scope}活动</span>
+          <span>📍 <b>{area_txt}</b></span>
+          <span>{kw_txt or '· 不限关键字'}</span>
+          <span class="res">共 {total_n} 个 · 校内 {len(on_items)} / 校外 {len(off_rows)}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
+    last = st.session_state.get("feed_tick_at")
+    st.caption(
+        "最近更新：" + (last.strftime("%H:%M:%S") if last else "—")
+        + ("　·　校内外分开统计，校外按距校区由近到远" if same_city
+           else "　·　校内外分开统计，跨市活动按日期排列")
+        + "　·　活动为模拟数据，报名以主办方公告为准"
+    )
     if st.session_state.get("new_push"):
         st.info(f"📬 新活动推送：{st.session_state.new_push}")
         st.session_state.new_push = None
 
-    on_tab, off_tab = st.tabs(
-        [
-            f"🏫 校内活动（{len(st.session_state.activities_on)}）",
-            f"🌆 上海全市校外（{len(st.session_state.activities_off)}）",
-        ]
-    )
-    with on_tab:
-        kw_on = st.text_input(
-            "校内活动搜索", value="", key="act_kw_on",
-            placeholder="输入关键字过滤，如 图书馆 / 运动会 / 环保",
-        ).strip()
-        items = sorted(st.session_state.activities_on, key=lambda x: x["日期"])
-        if kw_on:
-            items = [
-                a for a in items
-                if kw_on in (a["标题"] + a["主办"] + "".join(a.get("标签", [])))
-            ]
-            st.caption(f"匹配「{kw_on}」的校内活动 {len(items)} 个")
-        if not items:
+    # ---------------- 校内 ----------------
+    if want_on:
+        st.markdown(
+            f'<div class="sec-head on">🏫 校内活动 <span>{len(on_items)} 个'
+            + (f" · 来自 {school['名称']}" if school else "")
+            + "</span></div>",
+            unsafe_allow_html=True,
+        )
+        if not school:
             st.markdown(
                 '<div class="empty-box"><span class="big">🏫</span>'
-                "没有匹配的校内活动<br>换个关键字试试</div>",
+                "尚未绑定学校，看不到校内活动<br>请在左侧「学校绑定」按省份选择学校并绑定</div>",
                 unsafe_allow_html=True,
             )
-        for a in items:
+        elif not on_items:
+            st.markdown(
+                '<div class="empty-box"><span class="big">🔍</span>'
+                f"校内没有匹配「{kw}」的活动<br>清空关键字或切到「校外」看看</div>",
+                unsafe_allow_html=True,
+            )
+        for a in on_items:
             render_activity_card(a, "on")
-    with off_tab:
-        c1, c2 = st.columns([1, 1.6])
-        areas = ["全部区域"] + [
-            d for d in SHANGHAI_DISTRICTS
-            if any(a.get("区域") == d for a in st.session_state.activities_off)
-        ]
-        cur_area = st.session_state.get("push_district", "全部区域")
-        area = c1.selectbox(
-            "区域筛选（上海全市）", areas,
-            index=areas.index(cur_area) if cur_area in areas else 0,
-            key="area_picker",
+
+    # ---------------- 校外 ----------------
+    if want_off:
+        if same_city:
+            head_extra = f" · 距 {school['名称'].split('（')[0]} 由近到远"
+        elif school:
+            head_extra = f" · 不在校区所在城市，已按日期排序"
+        else:
+            head_extra = " · 绑定学校后可显示距离"
+        st.markdown(
+            f'<div class="sec-head off">🌆 校外活动 <span>{len(off_rows)} 个{head_extra}</span></div>',
+            unsafe_allow_html=True,
         )
-        st.session_state.push_district = area
-        kw = c2.text_input(
-            "校外活动搜索", value=st.session_state.get("push_keyword", ""),
-            key="act_kw_off", placeholder="输入关键字过滤，如 科普 / 助老 / 环保",
-        ).strip()
-        st.session_state.push_keyword = kw
-
-        rows = []
-        for a in st.session_state.activities_off:
-            if area != "全部区域" and a.get("区域") != area:
-                continue
-            if kw and kw not in (a["标题"] + a["主办"] + "".join(a.get("标签", []))):
-                continue
-            rows.append((haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"]), a))
-        rows.sort(key=lambda x: x[0])
-
-        if not rows:
+        if not off_rows:
             st.markdown(
                 '<div class="empty-box"><span class="big">🌆</span>'
-                "当前筛选条件下没有校外活动<br>可切换为「全部区域」或清空关键字</div>",
+                f"{area_txt} 没有匹配的活动<br>可换一个区县或清空关键字</div>",
                 unsafe_allow_html=True,
             )
         else:
-            cover = len({a.get("区域") for _, a in rows})
-            farthest = rows[-1][0]
-            st.caption(
-                f"{area}　共 {len(rows)} 个活动，覆盖 {cover} 个区，"
-                f"距校区 {rows[0][0]:.1f} ~ {farthest:.1f} km，按距离由近到远排列"
-            )
-        for d, a in rows:
+            near, far = off_rows[0][0], next((d for d, _ in reversed(off_rows) if d is not None), None)
+            if near is not None and far is not None:
+                st.caption(f"距校区 {near:.1f} ~ {far:.1f} km　·　共 {len(off_rows)} 个活动")
+            elif school:
+                st.caption(f"{area_txt} 不在 {school_city or school.get('城市', '')}，"
+                           f"跨市活动不计算距离，按日期排列　·　共 {len(off_rows)} 个活动")
+        for d, a in off_rows:
             render_activity_card(a, "off", d)
+
 
 
 def render_sidebar():
@@ -2185,6 +2578,10 @@ def render_sidebar():
         else:
             st.caption(f"将记入：{acc['姓名']} · {acc['学号']}")
             with st.form("add_form", clear_on_submit=True):
+                kind_pick = st.radio(
+                    "志愿类型", [KIND_OFF, KIND_ON], horizontal=True,
+                    help="校内：学校组织的岗位（图书馆、迎新、校运会等）；校外：社区、场馆、地铁等社会服务",
+                )
                 project = st.text_input("志愿活动名称", placeholder="例如 社区垃圾分类督导")
                 d = st.date_input("服务日期", value=datetime.now().date())
                 hours = st.number_input(
@@ -2198,9 +2595,11 @@ def render_sidebar():
                     date=d.strftime("%Y-%m-%d"),
                     hours=hours,
                     place=place,
+                    kind=kind_pick,
                 )
                 add_log("add_volunteer_record",
-                        {"project_name": project, "date": d.strftime("%Y-%m-%d"), "hours": hours},
+                        {"project_name": project, "date": d.strftime("%Y-%m-%d"),
+                         "hours": hours, "kind": kind_pick},
                         res)
                 st.session_state.toast = (
                     "success" if res.get("status") == "success" else "error",
@@ -2219,7 +2618,7 @@ def render_sidebar():
             st.session_state.toast = ("success", "对话与结果已清空。")
             st.rerun()
         if c2.button("重置数据", use_container_width=True):
-            st.session_state.volunteer_df = pd.DataFrame(DEFAULT_DATA)
+            st.session_state.volunteer_df = pd.DataFrame(DEFAULT_DATA, columns=RECORD_COLUMNS)
             st.session_state.tool_logs = []
             st.session_state.history = []
             st.session_state.last_summary = None
@@ -2305,18 +2704,21 @@ def render_chat():
 
     # 快捷指令
     st.markdown(
+        '<span class="chip">⚖️ 校内 / 校外各多少小时</span>'
         '<span class="chip">🕘 查询我10月的记录</span>'
         '<span class="chip">📊 统计每个人的总时长</span>'
-        '<span class="chip">📥 导出汇总Excel</span>',
+        '<span class="chip">📍 查某地志愿活动</span>',
         unsafe_allow_html=True,
     )
-    c1, c2, c3 = st.columns(3)
-    if c1.button("🕘 查询我的记录", use_container_width=True):
+    c1, c2, c3, c4 = st.columns(4)
+    if c1.button("⚖️ 校内外时长", use_container_width=True):
+        st.session_state.pending_input = "帮我看看我校内和校外的志愿时长分别是多少，总共多少小时"
+    if c2.button("🕘 我的记录", use_container_width=True):
         st.session_state.pending_input = "帮我查询我 2026-10-01 到 2026-10-31 的志愿记录"
-    if c2.button("📊 统计总时长", use_container_width=True):
-        st.session_state.pending_input = "统计 2026-09-01 到 2026-10-31 每个人（全员）的累计志愿总时长"
-    if c3.button("📥 导出Excel", use_container_width=True):
-        st.session_state.pending_input = "把 2026-09-01 到 2026-10-31 的志愿时长汇总导出成 Excel"
+    if c3.button("📊 全员统计", use_container_width=True):
+        st.session_state.pending_input = "统计 2026-09-01 到 2026-10-31 每个人（全员）的累计志愿总时长，并导出Excel"
+    if c4.button("📍 查活动", use_container_width=True):
+        st.session_state.pending_input = "学校最近有什么校内志愿活动？"
 
     # 历史对话：用户提问高亮编号显示，助手回复普通气泡，错误回复红色高亮
     if not st.session_state.history:
