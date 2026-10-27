@@ -3,11 +3,13 @@
 校园志愿时长汇总助手（路径B：Streamlit + 通义千问 Tool Calling）
 ====================================================================
 - 通过 OpenAI 兼容接口调用阿里云百炼 DashScope 的通义千问模型
-- 自主新增 3 个业务工具，由模型真实发起 Tool Call（非 if 关键词判断）
+- 自行设计 5 个业务工具，由模型真实发起 Tool Call（非 if 关键词判断）
   1. query_volunteer_data    按起止日期（+可选项目名）查询志愿记录
   2. calc_total_hours        按姓名分组统计累计志愿总时长
   3. export_volunteer_excel  导出汇总 Excel（网页内置下载按钮）
-- 加分项：日志分区展示 / 表单新增记录 / 强异常容错 / 查询后自动生成柱状图
+  4. query_open_activities   查询校内活动与上海全市校外活动（含详情与报名链接）
+  5. add_volunteer_record    为已绑定的个人账号录入新的志愿活动与时长
+- 加分项：个人账号绑定 / 学校绑定 / 日志分区展示 / 表单新增记录 / 强异常容错 / 自动柱状图
 运行：streamlit run app.py
 """
 
@@ -53,6 +55,9 @@ SYSTEM_PROMPT = (
     "若该工具返回未绑定学校，请提示用户在页面左侧「学校绑定」中选择并绑定学校。"
     "回答活动类问题时，请按日期或距离列出要点，说明主办方、时间、时长、剩余名额与所在区，"
     "并在末尾提示用户可在活动卡片下方展开查看详情、通过报名链接前往官方平台报名。"
+    "当用户要登记自己新参加的志愿活动（如'帮我记一笔：社区清洁 3 小时'）时，调用 add_volunteer_record，"
+    "姓名与学号由绑定的个人账号自动带入，不要向用户索要姓名学号；缺少活动名称或时长时先追问。"
+    "若该工具返回未绑定账号，请提示用户在左侧「个人账号」中绑定或新建账号。"
     "回答请简洁、使用中文。"
 )
 
@@ -68,6 +73,15 @@ DEFAULT_DATA = [
     {"姓名": "王五", "学号": "2023003", "志愿项目": "实验室开放日引导", "日期": "2026-10-18", "时长(小时)": 2.0},
     {"姓名": "赵六", "学号": "2023004", "志愿项目": "社区敬老院慰问", "日期": "2026-10-01", "时长(小时)": 5.5},
     {"姓名": "赵六", "学号": "2023004", "志愿项目": "图书馆图书整理", "日期": "2026-10-08", "时长(小时)": 3.0},
+]
+
+# ============================ 个人账号 ============================
+# 可绑定的演示账号（与 DEFAULT_DATA 中的志愿者对应），也支持自己新建账号
+DEMO_ACCOUNTS = [
+    {"姓名": "张三", "学号": "2023001", "学院": "信息科学与技术学院", "专业": "计算机科学与技术 2301 班"},
+    {"姓名": "李四", "学号": "2023002", "学院": "管理学院", "专业": "工商管理 2302 班"},
+    {"姓名": "王五", "学号": "2023003", "学院": "外国语学院", "专业": "英语 2301 班"},
+    {"姓名": "赵六", "学号": "2023004", "学院": "护理学院", "专业": "护理学 2303 班"},
 ]
 
 # ============================ 学校与志愿活动数据 ============================
@@ -354,6 +368,7 @@ TOOL_ICON = {
     "calc_total_hours": "🧮",
     "export_volunteer_excel": "📤",
     "query_open_activities": "🏫",
+    "add_volunteer_record": "📝",
 }
 STATUS_COLOR = {"success": "#22C55E", "error": "#EF4444", "empty": "#F59E0B"}
 STATUS_LABEL = {"success": "成功", "error": "异常", "empty": "空结果"}
@@ -396,6 +411,13 @@ def init_state():
         st.session_state.last_summary = None     # 最近一次统计结果（用于柱状图）
     if "toast" not in st.session_state:
         st.session_state.toast = None            # 一次性提示
+    # —— 个人账号绑定 ——
+    if "bound_account" not in st.session_state:
+        st.session_state.bound_account = dict(DEMO_ACCOUNTS[0])   # 默认绑定演示账号“张三”
+    if "acct_new" not in st.session_state:
+        st.session_state.acct_new = False          # 是否正在新建账号
+    if "show_all_rows" not in st.session_state:
+        st.session_state.show_all_rows = False     # 数据表是否显示全部人
     # —— 学校绑定与活动推送 ——
     if "bound_school" not in st.session_state:
         # 默认绑定上海杉达学院（金海校区），打开即可看到校内活动与上海全市推送
@@ -610,11 +632,92 @@ def query_open_activities(scope: str = "all", district: str = "", keyword: str =
     }
 
 
+def get_bound_account():
+    """当前绑定的个人账号，未绑定返回 None"""
+    return st.session_state.get("bound_account")
+
+
+def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
+                         place: str = "", note: str = "") -> dict:
+    """工具5：为当前绑定的个人账号录入一条新的志愿记录（只需活动名称与时长）"""
+    acc = get_bound_account()
+    if not acc:
+        return {
+            "status": "error",
+            "message": "尚未绑定个人账号。请先在左侧「个人账号」中选择或新建账号并绑定，再录入志愿记录。",
+        }
+
+    proj = str(project_name or "").strip()
+    if not proj:
+        return {"status": "error", "message": "缺少志愿活动名称，请补充「做了什么活动」。"}
+
+    # 日期：未提供则默认今天；提供了但格式非法则报错
+    date_txt = str(date or "").strip()
+    if not date_txt:
+        d = datetime.now().date()
+    else:
+        d = _parse_date(date_txt)
+        if d is None:
+            return {"status": "error",
+                    "message": f"日期「{date_txt}」格式不正确，请使用 YYYY-MM-DD，例如 2026-10-27。"}
+    if d > datetime.now().date():
+        return {"status": "error",
+                "message": f"服务日期 {d.strftime('%Y-%m-%d')} 还没到，只能登记已经完成的志愿活动。"}
+
+    try:
+        h = float(hours)
+    except (TypeError, ValueError):
+        return {"status": "error", "message": "时长必须是数字，单位为小时，例如 3 或 2.5。"}
+    if h <= 0:
+        return {"status": "error", "message": "时长必须大于 0 小时。"}
+    if h > 24:
+        return {"status": "error", "message": f"单次志愿时长 {h:g} 小时明显超出合理范围（一般不超过 24），请核对后重填。"}
+    h = round(h * 2) / 2  # 统一到 0.5 小时刻度
+
+    date_str = d.strftime("%Y-%m-%d")
+    df = st.session_state.volunteer_df
+    dup = df[
+        (df["姓名"] == acc["姓名"])
+        & (df["志愿项目"] == proj)
+        & (df["日期"] == date_str)
+    ]
+    if not dup.empty:
+        return {
+            "status": "error",
+            "message": f"「{proj}」在 {date_str} 已经有一条记录了（{dup.iloc[0]['时长(小时)']:g} 小时），"
+                       f"如确需修改请先重置数据或换个日期。",
+        }
+
+    new_row = {
+        "姓名": acc["姓名"],
+        "学号": acc["学号"],
+        "志愿项目": proj,
+        "日期": date_str,
+        "时长(小时)": h,
+    }
+    st.session_state.volunteer_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
+    mine = st.session_state.volunteer_df[st.session_state.volunteer_df["姓名"] == acc["姓名"]]
+    total = float(mine["时长(小时)"].sum())
+    extra = "；".join([x for x in [f"地点 {place.strip()}" if str(place).strip() else "",
+                                   f"备注 {note.strip()}" if str(note).strip() else ""] if x])
+    return {
+        "status": "success",
+        "record": new_row,
+        "personal_total": total,
+        "personal_count": int(len(mine)),
+        "message": (f"已为 {acc['姓名']}（学号 {acc['学号']}）录入：{date_str} {proj} {h:g} 小时"
+                    + (f"（{extra}）" if extra else "")
+                    + f"。该同学累计志愿 {total:.1f} 小时，共 {len(mine)} 条记录。"),
+    }
+
+
 TOOL_IMPL = {
     "query_volunteer_data": query_volunteer_data,
     "calc_total_hours": calc_total_hours,
     "export_volunteer_excel": export_volunteer_excel,
     "query_open_activities": query_open_activities,
+    "add_volunteer_record": add_volunteer_record,
 }
 
 # 工具 Schema：交给通义千问，由模型自主决定何时调用（真实 Tool Calling）
@@ -691,6 +794,39 @@ TOOLS_SCHEMA = [
                         "description": "可选。按标题、主办方或标签过滤，例如 科普、助老、环保",
                     },
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_volunteer_record",
+            "description": "为当前已绑定的个人账号新增一条志愿记录，只需要活动名称与时长。用户说“帮我记一笔/登记/录入”自己参加的志愿活动时调用。姓名与学号由账号自动带入，不要向用户索要。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_name": {
+                        "type": "string",
+                        "description": "志愿活动名称，必填，例如 社区垃圾分类督导",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "服务日期 YYYY-MM-DD，可选；用户说“今天/昨天”请先换算成具体日期，省略则默认今天",
+                    },
+                    "hours": {
+                        "type": "number",
+                        "description": "本次志愿时长（小时），必填，例如 3 或 2.5",
+                    },
+                    "place": {
+                        "type": "string",
+                        "description": "可选。服务地点，例如 浦东新区金桥镇社区服务中心",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "可选。备注，例如 含往返交通、由院系统一组织",
+                    },
+                },
+                "required": ["project_name", "hours"],
             },
         },
     },
@@ -811,7 +947,24 @@ def run_agent(user_input: str, status=None):
     st.session_state.history.append(("user", user_input))
     st.session_state.last_failed_input = None  # 本次处理成功与否在结束时确定
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # 账号上下文：让模型知道"我"是谁，录入时不必再问姓名学号
+    sys_content = SYSTEM_PROMPT
+    today = datetime.now()
+    sys_content += (
+        f"\n今天是 {today.strftime('%Y-%m-%d')}（{today.strftime('%A')}）。"
+        "用户说“今天/昨天/前天/本周/上周/本月”等相对时间时，必须基于这一天换算成具体日期，不要凭记忆推断年份。"
+    )
+    acc = st.session_state.get("bound_account")
+    if acc:
+        sys_content += (
+            f"\n当前登录的个人账号：{acc['姓名']}（学号 {acc['学号']}"
+            + (f"，{acc['学院']}" if acc.get("学院") else "")
+            + "）。用户说“我”时即指这位同学，录入记录时工具会自动带入该账号。"
+        )
+    else:
+        sys_content += "\n当前尚未绑定个人账号，录入类请求需先提示用户去左侧绑定。"
+
+    messages = [{"role": "system", "content": sys_content}]
     for role, text in st.session_state.history:
         messages.append({"role": role, "content": text})
 
@@ -1157,6 +1310,65 @@ GLOBAL_CSS = """
   }
   .school-chip span { display: block; font-size: 11px; font-weight: 400; color: #A8C3E8; margin-top: 2px; }
 
+  /* ---------- 个人账号 ---------- */
+  .acct-strip {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: linear-gradient(120deg, #FFFFFF 0%, #EFF6FF 100%);
+    border: 1px solid #DCE7F5; border-left: 4px solid #2B6CB0;
+    border-radius: 14px; padding: 12px 22px; margin: 4px 0 10px;
+    box-shadow: 0 3px 12px rgba(43,108,176,.09);
+  }
+  .acct-strip.unbound {
+    background: #FFFDF5; border: 1.5px dashed #E2B93B; box-shadow: none;
+  }
+  .acct-strip.unbound .as-label { color: #B7791F; }
+  .acct-strip.unbound .as-name { color: #7B5804; font-size: 15px; }
+  .acct-strip.unbound .as-sub { color: #A17A1E; }
+  .as-left { display: flex; align-items: center; gap: 12px; }
+  .as-avatar {
+    width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%;
+    background: linear-gradient(135deg, #2B6CB0 0%, #63B3ED 100%);
+    color: #fff; font-size: 18px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(43,108,176,.28);
+  }
+  .acct-strip.unbound .as-avatar {
+    background: #F5E6C0; color: #8A6D1F; box-shadow: none;
+  }
+  .as-txt { display: flex; flex-direction: column; gap: 2px; }
+  .as-label { font-size: 10.5px; letter-spacing: 2px; font-weight: 700; color: #5B7FA6; }
+  .as-name { font-size: 18px; font-weight: 800; color: #17324D; letter-spacing: .3px; }
+  .as-name em {
+    font-style: normal; font-size: 11.5px; font-weight: 600; color: #2B6CB0;
+    background: #E4EFFC; border-radius: 99px; padding: 1px 9px; margin-left: 8px;
+    vertical-align: middle;
+  }
+  .as-sub { font-size: 11.5px; color: #6B7F94; }
+  .as-right { display: flex; gap: 26px; }
+  .as-right > div { text-align: center; }
+  .as-right b {
+    display: block; font-size: 18px; font-weight: 800; color: #1F5C99;
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .as-right span { font-size: 11px; color: #7C8FA3; }
+
+  .acct-chip {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.26);
+    border-radius: 12px; padding: 9px 11px; margin-top: 6px;
+  }
+  .ac-avatar {
+    width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%;
+    background: linear-gradient(135deg, #4299E1, #63B3ED); color: #fff;
+    font-size: 14px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ac-name { font-size: 13px; font-weight: 800; color: #fff; }
+  .ac-id { font-size: 10px; font-weight: 500; color: #A8C3E8; margin-left: 6px; }
+  .ac-sub { font-size: 10.5px; color: #9CB6D4; margin-top: 2px; line-height: 1.35; }
+  .ac-kpi { font-size: 11px; color: #C6DBEF; margin-top: 3px; }
+  .ac-kpi b { color: #fff; font-family: Consolas, monospace; }
+
   /* ---------- 活动卡片 ---------- */
   .act-card {
     background: #fff; border: 1px solid #E6ECF3; border-left: 4px solid #38A169;
@@ -1217,10 +1429,11 @@ def render_header():
         f"""
         <div class="hero">
           <div class="hero-title">⏱️ 校园志愿时长汇总助手</div>
-          <div class="hero-sub">自然语言一句直达：查询记录 · 统计时长 · 导出 Excel —— 由通义千问 Tool Calling 真实驱动</div>
+          <div class="hero-sub">绑定个人账号，一句话完成：登记志愿 · 查询记录 · 统计时长 · 导出 Excel · 发现活动</div>
           <div>
             <span class="badge">🤖 {MODEL_NAME}</span>
-            <span class="badge">🛠️ 3 个业务工具</span>
+            <span class="badge">🛠️ 5 个业务工具</span>
+            <span class="badge">👤 个人账号绑定</span>
             <span class="badge">🧾 工具调用日志</span>
             <span class="badge">📊 自动可视化</span>
           </div>
@@ -1348,6 +1561,140 @@ def render_download():
             "还没有导出过汇总表<br>对助手说“帮我导出汇总 Excel”试试</div>",
             unsafe_allow_html=True,
         )
+
+
+# ============================ 个人账号绑定 ============================
+def account_stats(acc):
+    """返回 (我的记录数, 我的累计时长)"""
+    df = st.session_state.volunteer_df
+    mine = df[df["姓名"] == acc["姓名"]]
+    return len(mine), float(mine["时长(小时)"].sum()) if len(mine) else 0.0
+
+
+def _do_create_account():
+    """新建账号表单的回调：校验后写入 bound_account，并让选择器跳到新账号"""
+    n_name = (st.session_state.get("new_acct_name") or "").strip()
+    n_sid = (st.session_state.get("new_acct_sid") or "").strip()
+    n_col = (st.session_state.get("new_acct_col") or "").strip()
+    if not n_name or not n_sid:
+        st.session_state.toast = ("error", "姓名和学号都要填写，才能绑定个人账号。")
+        return
+    if any(a["学号"] == n_sid and a["姓名"] != n_name for a in DEMO_ACCOUNTS):
+        st.session_state.toast = ("error", f"学号 {n_sid} 已被其他账号占用，请核对。")
+        return
+    st.session_state.bound_account = {"姓名": n_name, "学号": n_sid, "学院": n_col, "专业": ""}
+    st.session_state.acct_picker = f"{n_name}（我的账号）"
+    st.session_state.new_acct_name = ""
+    st.session_state.new_acct_sid = ""
+    st.session_state.new_acct_col = ""
+    st.session_state.toast = ("success", f"已绑定个人账号：{n_name}（{n_sid}），之后录入只需填活动名称与时长。")
+
+
+def render_account_bind():
+    """侧栏：绑定 / 切换 / 新建 / 退出个人账号"""
+    st.markdown("**👤 个人账号**")
+    acc = st.session_state.get("bound_account")
+    names = [a["姓名"] for a in DEMO_ACCOUNTS]
+    options = list(names)
+    if acc and acc["姓名"] not in names:
+        options.append(f"{acc['姓名']}（我的账号）")
+    options.append("➕ 新建我的账号")
+
+    cur_label = None
+    if acc:
+        cur_label = acc["姓名"] if acc["姓名"] in names else f"{acc['姓名']}（我的账号）"
+    idx = options.index(cur_label) if cur_label in options else len(options) - 1
+    pick = st.selectbox("选择账号", options, index=idx, key="acct_picker")
+
+    if pick == "➕ 新建我的账号":
+        with st.form("new_acct_form"):
+            st.text_input("姓名", placeholder="例如 陈小明", key="new_acct_name")
+            st.text_input("学号", placeholder="例如 2024010234", key="new_acct_sid")
+            st.text_input("学院 / 专业（可选）", placeholder="例如 信息科学与技术学院", key="new_acct_col")
+            st.form_submit_button("绑定这个账号", use_container_width=True,
+                                  on_click=_do_create_account)
+    else:
+        c1, c2 = st.columns(2)
+        if c1.button("绑定 / 切换", use_container_width=True, key="acct_bind_btn"):
+            demo = next((a for a in DEMO_ACCOUNTS if a["姓名"] == pick), None)
+            if demo:
+                st.session_state.bound_account = dict(demo)
+                st.session_state.toast = ("success", f"已登录：{demo['姓名']}（{demo['学号']}）")
+            else:
+                st.session_state.toast = ("success", f"当前已是 {acc['姓名']} 的账号。")
+            st.rerun()
+        if c2.button("退出登录", use_container_width=True, key="acct_logout_btn"):
+            st.session_state.bound_account = None
+            st.session_state.toast = ("success", "已退出个人账号，录入功能暂不可用。")
+            st.rerun()
+
+    acc = st.session_state.get("bound_account")
+    if not acc:
+        st.caption("⚠️ 未绑定账号：无法录入自己的志愿记录")
+        return
+    cnt, hrs = account_stats(acc)
+    sub = " · ".join([x for x in [acc.get("学院", ""), acc.get("专业", "")] if x]) or "未填写院系信息"
+    st.markdown(
+        f"""
+        <div class="acct-chip">
+          <div class="ac-avatar">{acc["姓名"][:1]}</div>
+          <div class="ac-main">
+            <div class="ac-name">{acc["姓名"]}<span class="ac-id">学号 {acc["学号"]}</span></div>
+            <div class="ac-sub">{sub}</div>
+            <div class="ac-kpi">已录 <b>{cnt}</b> 条 · 累计 <b>{hrs:.1f}</b> 小时</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_account_strip():
+    """顶部：个人账号状态条（未绑定时给出引导）"""
+    acc = st.session_state.get("bound_account")
+    if not acc:
+        st.markdown(
+            """
+            <div class="acct-strip unbound">
+              <div class="as-left">
+                <span class="as-avatar">?</span>
+                <div class="as-txt">
+                  <span class="as-label">未绑定个人账号</span>
+                  <span class="as-name">绑定后录入志愿记录不必再填姓名学号</span>
+                  <span class="as-sub">入口：左侧边栏「个人账号」→ 选择账号或新建我的账号 → 绑定</span>
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    cnt, hrs = account_stats(acc)
+    df = st.session_state.volunteer_df
+    avg = hrs / cnt if cnt else 0.0
+    sub = " · ".join([x for x in [acc.get("学院", ""), acc.get("专业", "")] if x]) or "未填写院系信息"
+    st.markdown(
+        f"""
+        <div class="acct-strip">
+          <div class="as-left">
+            <span class="as-avatar">{acc["姓名"][:1]}</span>
+            <div class="as-txt">
+              <span class="as-label">当前账号</span>
+              <span class="as-name">{acc["姓名"]}<em>学号 {acc["学号"]}</em></span>
+              <span class="as-sub">{sub}</span>
+            </div>
+          </div>
+          <div class="as-right">
+            <div><b>{cnt}</b><span>我的记录</span></div>
+            <div><b>{hrs:.1f}</b><span>我的累计时长</span></div>
+            <div><b>{avg:.1f}</b><span>单次平均时长</span></div>
+            <div><b>{len(df)}</b><span>全员记录</span></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ============================ 学校绑定 / 活动中心 ============================
@@ -1621,41 +1968,60 @@ def render_sidebar():
             unsafe_allow_html=True,
         )
 
-        # ---- 学校绑定（置顶） ----
+        # ---- 个人账号（置顶） ----
+        render_account_bind()
+        st.divider()
+
+        # ---- 学校绑定 ----
         render_school_bind()
         st.divider()
 
         # ---- 数据表 ----
-        st.markdown("**📋 当前数据表**（模拟数据 · 可追加）")
-        st.dataframe(st.session_state.volunteer_df, use_container_width=True, height=230)
+        acc = st.session_state.get("bound_account")
+        df_all = st.session_state.volunteer_df
+        show_all = st.toggle(
+            "显示全部成员的记录",
+            value=st.session_state.show_all_rows,
+            key="show_all_toggle",
+        )
+        st.session_state.show_all_rows = show_all
+        if acc and not show_all:
+            df_view = df_all[df_all["姓名"] == acc["姓名"]]
+            st.markdown(f"**📋 我的志愿记录**（{len(df_view)} 条）")
+        else:
+            df_view = df_all
+            st.markdown(f"**📋 全部志愿记录**（{len(df_view)} 条）")
+        st.dataframe(df_view, use_container_width=True, height=210)
 
-        # ---- 表单新增记录 ----
-        st.markdown("**➕ 新增志愿记录**")
-        with st.form("add_form", clear_on_submit=True):
-            name = st.text_input("姓名")
-            sid = st.text_input("学号")
-            project = st.text_input("志愿项目")
-            d = st.date_input("日期")
-            hours = st.number_input("时长(小时)", min_value=0.5, max_value=24.0, step=0.5)
-            submitted = st.form_submit_button("✔️ 提交记录")
-        if submitted:
-            if not name.strip() or not project.strip():
-                st.session_state.toast = ("error", "姓名和志愿项目不能为空。")
-            elif hours <= 0:
-                st.session_state.toast = ("error", "时长必须大于 0。")
-            else:
-                new_row = {
-                    "姓名": name.strip(),
-                    "学号": sid.strip() or "-",
-                    "志愿项目": project.strip(),
-                    "日期": d.strftime("%Y-%m-%d"),
-                    "时长(小时)": float(hours),
-                }
-                st.session_state.volunteer_df = pd.concat(
-                    [st.session_state.volunteer_df, pd.DataFrame([new_row])],
-                    ignore_index=True,
+        # ---- 录入我的志愿记录（姓名/学号由账号带入） ----
+        st.markdown("**➕ 录入我的志愿记录**")
+        if not acc:
+            st.caption("⚠️ 请先在上方「个人账号」绑定账号，绑定后这里只需填活动名称与时长。")
+        else:
+            st.caption(f"将记入：{acc['姓名']} · {acc['学号']}")
+            with st.form("add_form", clear_on_submit=True):
+                project = st.text_input("志愿活动名称", placeholder="例如 社区垃圾分类督导")
+                d = st.date_input("服务日期", value=datetime.now().date())
+                hours = st.number_input(
+                    "志愿时长(小时)", min_value=0.5, max_value=24.0, step=0.5, value=3.0
                 )
-                st.session_state.toast = ("success", f"已新增：{name.strip()} · {project.strip()} {hours} 小时")
+                place = st.text_input("服务地点（可选）", placeholder="例如 浦东新区金桥镇")
+                submitted = st.form_submit_button("✔️ 记入我的志愿时长", use_container_width=True)
+            if submitted:
+                res = add_volunteer_record(
+                    project_name=project,
+                    date=d.strftime("%Y-%m-%d"),
+                    hours=hours,
+                    place=place,
+                )
+                add_log("add_volunteer_record",
+                        {"project_name": project, "date": d.strftime("%Y-%m-%d"), "hours": hours},
+                        res)
+                st.session_state.toast = (
+                    "success" if res.get("status") == "success" else "error",
+                    res.get("message", ""),
+                )
+                st.rerun()
 
         # ---- 工具栏 ----
         st.markdown("**🧹 会话管理**")
@@ -1822,6 +2188,7 @@ def main():
     render_header()
     render_stats()
     render_sidebar()
+    render_account_strip()
     render_school_strip()
 
     # 双栏：左侧对话，右侧「工具日志 / 结果与导出」双页签

@@ -170,6 +170,9 @@
     padding: .9rem 1.05rem; position: relative; overflow: hidden;
   }
   .card.top { border-top: .18rem solid var(--c, var(--ac)); }
+  .card.slim { padding: .5rem .75rem; }
+  .card.slim .ct { font-size: .78rem; margin-bottom: .16rem; }
+  .card.slim .cd { font-size: .72rem; line-height: 1.5; }
   .card .ct { font-size: .84rem; font-weight: 800; color: var(--ink); margin-bottom: .32rem; }
   .card .cd { font-size: .78rem; color: var(--body); line-height: 1.65; }
   .card .badge {
@@ -264,6 +267,23 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
   }
   .mock .body { display: grid; grid-template-columns: 1.15fr 1fr; gap: .55rem; padding: .6rem; }
+  .mock .acctbar {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: .4rem;
+    background: #fff; border: .05rem solid #DCE7F5; border-left: .16rem solid #2563EB;
+    border-radius: .35rem; padding: .3rem .55rem; text-align: left;
+  }
+  .mock .acctbar .av {
+    width: .95rem; height: .95rem; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, #2563EB, #63B3ED); color: #fff;
+    font-size: .5rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
+  }
+  .mock .acctbar .nm { font-size: .6rem; font-weight: 800; color: var(--ink); }
+  .mock .acctbar .nm em {
+    font-style: normal; font-weight: 600; font-size: .52rem; color: #2563EB;
+    background: #E4EFFC; border-radius: 99rem; padding: .02rem .34rem; margin-left: .3rem;
+  }
+  .mock .acctbar .kp { font-size: .55rem; color: var(--muted); margin-left: auto; }
+  .mock .acctbar .kp b { color: #0D9488; font-family: Consolas, monospace; }
   .mock .panel { background: #fff; border: .05rem solid var(--line); border-radius: .35rem; padding: .5rem .55rem; }
   .mock .ptitle { font-size: .58rem; letter-spacing: .08em; color: var(--muted); margin-bottom: .38rem; font-weight: 700; }
   .bubble {
@@ -282,6 +302,22 @@
   }
   .logrow b { font-family: Consolas, monospace; color: var(--ink); font-size: .57rem; }
   .logrow em { font-style: normal; color: #0D9488; font-weight: 800; }
+  /* 放大版界面示意（第 07 页） */
+  .mock.big .bar .u { font-size: .66rem; padding: .2rem .7rem; }
+  .mock.big .ptitle { font-size: .68rem; margin-bottom: .45rem; }
+  .mock.big .bubble { font-size: .7rem; padding: .42rem .58rem; margin-bottom: .4rem; }
+  .mock.big .answer { font-size: .66rem; padding: .48rem .58rem; line-height: 1.65; }
+  .mock.big .logrow { font-size: .64rem; padding: .36rem .5rem; margin-bottom: .3rem; }
+  .mock.big .logrow b { font-size: .65rem; }
+  .mock.big .minibtn { font-size: .68rem; padding: .42rem; margin-top: .4rem; }
+  .mock.big .acctbar { padding: .4rem .6rem; }
+  .mock.big .acctbar .av { width: 1.1rem; height: 1.1rem; font-size: .58rem; }
+  .mock.big .acctbar .nm { font-size: .68rem; }
+  .mock.big .acctbar .nm em { font-size: .58rem; }
+  .mock.big .acctbar .kp { font-size: .62rem; }
+  .mock.big .body { gap: .6rem; padding: .65rem; }
+  .mock.big .panel { padding: .58rem .62rem; }
+
   .minibtn {
     text-align: center; font-size: .58rem; color: #fff; font-weight: 800;
     background: linear-gradient(135deg, #2563EB, #60A5FA); border-radius: .28rem; padding: .3rem;
@@ -366,10 +402,11 @@
       <h1 class="rv" style="--d:.18s">校园志愿时长汇总助手</h1>
       <div class="sub rv" style="--d:.32s">
         Streamlit × 通义千问 Tool Calling<br>
-        用一句话完成「查询 · 统计 · 导出报表」，并推送上海全市的志愿活动
+        用一句话完成「登记 · 查询 · 统计 · 导出报表」，并推送上海全市的志愿活动
       </div>
       <div class="chips rv" style="--d:.46s">
-        <span class="chip">4 个业务工具</span>
+        <span class="chip">5 个业务工具</span>
+        <span class="chip">个人账号绑定</span>
         <span class="chip">上海杉达 · 全市活动推送</span>
         <span class="chip">网页内导出 Excel</span>
         <span class="chip">工具调用可视化</span>
@@ -451,7 +488,7 @@
         </div>
       </div>
 
-      <div class="cards2 rv" style="--d:.38s; margin-top:1.1rem; align-items:stretch">
+      <div class="cards3 rv" style="--d:.38s; margin-top:1.1rem; align-items:stretch">
         <div class="card top" style="--c:#2563EB">
           <div class="badge" style="--c:#2563EB">链路一 · 时长统计</div>
           <div class="cd">
@@ -466,10 +503,17 @@
             校内实时刷新，上海全市校外按距离排队、可点开报名
           </div>
         </div>
+        <div class="card top" style="--c:#DB2777">
+          <div class="badge" style="--c:#DB2777">链路三 · 活动登记</div>
+          <div class="cd">
+            绑定个人账号 → 只说“做了什么、几小时”即可写入；<br>
+            姓名学号由账号带入，写完立刻可查询、统计、导出
+          </div>
+        </div>
       </div>
 
       <div class="note rv" style="--d:.44s; margin-top:.9rem">
-        <b>范围界定：</b>面向校团委与院系志愿负责人，单机运行，两个链路的业务数据均为课程自建模拟数据
+        <b>范围界定：</b>面向在校学生与院系志愿负责人，单机运行，三条链路的业务数据均为课程自建模拟数据
       </div>
     </div>
     <div class="pageno"><span class="pn">03</span> / 12</div>
@@ -505,7 +549,7 @@
 
         <div class="layer rv" style="--c:#D97706; --d:.38s">
           <span class="ln">D</span><span class="nm">工具层</span>
-          <span class="ds">四个本地函数：查询 / 统计 / 导出 / 活动查询，执行后以 JSON 回填，形成下一轮上下文</span>
+          <span class="ds">五个本地函数：查询 / 统计 / 导出 / 活动查询 / 记录录入，执行后以 JSON 回填，形成下一轮上下文</span>
         </div>
         <div class="vstep rv" style="--d:.44s">pandas 筛选与分组 · openpyxl 写出文件 · Haversine 算距离</div>
 
@@ -551,12 +595,12 @@
   <section class="slide" style="--ac:#2563EB">
     <div class="hd">
       <div class="kicker">05 · 工具设计</div>
-      <h2>四个工具的<em>入参、返回与取舍</em></h2>
+      <h2>五个工具的<em>入参、返回与取舍</em></h2>
       <div class="dek">工具均为项目内自行实现，参数结构直接决定模型能否稳定调用</div>
     </div>
 
     <div class="wrap">
-      <div class="cards3" style="grid-template-columns:repeat(4,1fr); gap:.7rem">
+      <div class="cards3" style="grid-template-columns:repeat(5,1fr); gap:.55rem">
         <div class="tool rv" style="--c:#2563EB; --d:.02s; padding:.8rem .7rem .7rem">
           <div class="ic">Q</div>
           <div class="nm">query_volunteer_data</div>
@@ -595,6 +639,16 @@
           </div>
           <div class="rt">{ status, school, on_campus[], off_campus[] }<br>校外按距离升序</div>
         </div>
+        <div class="tool rv" style="--c:#DB2777; --d:.42s; padding:.8rem .7rem .7rem">
+          <div class="ic">＋</div>
+          <div class="nm">add_volunteer_record</div>
+          <div class="pr">
+            <b>project_name</b> 必填<br>
+            <b>hours</b> 必填<br>
+            <b>date / place</b> 可选
+          </div>
+          <div class="rt">{ status, record, personal_total }<br>姓名学号取自绑定账号</div>
+        </div>
       </div>
 
       <div class="cards2 rv" style="--d:.36s; margin-top:.85rem; align-items:start">
@@ -605,26 +659,29 @@
     <span class="k">"scope"</span>:    {<span class="k">"enum"</span>: [<span class="s">"all"</span>,<span class="s">"on_campus"</span>,<span class="s">"off_campus"</span>]},
     <span class="k">"district"</span>: {<span class="k">"type"</span>: <span class="s">"string"</span>, <span class="c"># 浦东新区 / 徐汇区…</span>
                  <span class="k">"description"</span>: <span class="s">"上海某个区，不传=全市"</span>},
-    <span class="k">"keyword"</span>:  {<span class="k">"type"</span>: <span class="s">"string"</span>}
   },
   <span class="k">"required"</span>: []
 }</div>
         <div>
-          <div class="card top" style="--c:#0D9488; margin-bottom:.5rem">
+          <div class="card top slim" style="--c:#0D9488; margin-bottom:.38rem">
             <div class="ct">取舍一 · 可选参数</div>
             <div class="cd">用户不必说全条件，模型可采用默认行为</div>
           </div>
-          <div class="card top" style="--c:#7C3AED; margin-bottom:.5rem">
+          <div class="card top slim" style="--c:#7C3AED; margin-bottom:.38rem">
             <div class="ct">取舍二 · 数据不回传</div>
             <div class="cd">统计与导出省略数组参数，避免长 JSON 被截断导致 400</div>
           </div>
-          <div class="card top" style="--c:#D97706; margin-bottom:.5rem">
+          <div class="card top slim" style="--c:#D97706; margin-bottom:.38rem">
             <div class="ct">取舍三 · 状态三值</div>
             <div class="cd">success / empty / error 让模型分别给出结果、提示或修正建议</div>
           </div>
-          <div class="card top" style="--c:#2563EB">
+          <div class="card top slim" style="--c:#2563EB; margin-bottom:.38rem">
             <div class="ct">取舍四 · 距离不由模型算</div>
             <div class="cd">距离排序交给 Haversine 公式，区域由参数限定，防止模型编造</div>
+          </div>
+          <div class="card top slim" style="--c:#DB2777">
+            <div class="ct">取舍五 · 身份不进参数</div>
+            <div class="cd">姓名学号取自绑定账号，模型无需询问也无权填写，避免张冠李戴</div>
           </div>
         </div>
       </div>
@@ -636,17 +693,22 @@
   <section class="slide" style="--ac:#7C3AED">
     <div class="hd">
       <div class="kicker">06 · 功能演示</div>
-      <h2>界面四块：<em>提问 · 日志 · 结果 · 活动中心</em></h2>
-      <div class="dek">上两栏为对话与工具日志，底部活动中心分「校内」「校外」两页签，校外按距离升序</div>
+      <h2>界面四块：<em>账号 · 对话 · 日志 · 活动中心</em></h2>
+      <div class="dek">顶部账号条显示本人累计与全员记录；上两栏为对话与工具日志，底部活动中心分「校内」「校外」两页签</div>
     </div>
 
     <div class="wrap">
-      <div class="mock rv" style="--d:.05s">
+      <div class="mock big rv" style="--d:.05s">
         <div class="bar">
           <i style="background:#F87171"></i><i style="background:#FBBF24"></i><i style="background:#34D399"></i>
           <span class="u">localhost:8501 · 校园志愿时长汇总助手</span>
         </div>
         <div class="body">
+          <div class="acctbar">
+            <span class="av">张</span>
+            <span class="nm">张三<em>学号 2023001</em></span>
+            <span class="kp">我的记录 <b>4</b> 条 · 累计 <b>15.5</b> 小时　|　全员记录 <b>12</b> 条</span>
+          </div>
           <div class="panel">
             <div class="ptitle">智能对话</div>
             <div class="bubble">帮我查询 2026-10-01 到 2026-10-31 的志愿记录</div>
@@ -658,6 +720,11 @@
             <div class="answer">
               <b style="color:#0D9488">回答 2</b><br>
               已统计 4 人，合计 39.0 小时，Excel 汇总表已生成，可在右侧下载。
+            </div>
+            <div class="bubble u2">帮我记一笔：今天参加社区清洁志愿 3.5 小时</div>
+            <div class="answer">
+              <b style="color:#0D9488">回答 3</b><br>
+              已为张三（2023001）录入 2026-10-27 社区清洁 3.5 小时，本人累计 19.0 小时。
             </div>
           </div>
           <div class="panel">
@@ -674,6 +741,10 @@
               <b>export_volunteer_excel</b> <em>成功</em><br>
               结果 志愿时长汇总_215814.xlsx
             </div>
+            <div class="logrow" style="--c:#DB2777">
+              <b>add_volunteer_record</b> <em>成功</em><br>
+              入参 社区清洁 · 3.5h · 今天<br>结果 本人累计 19.0 小时
+            </div>
             <div class="minibtn">⬇ 下载 志愿时长汇总.xlsx</div>
           </div>
           <div class="panel" style="grid-column:1 / -1">
@@ -686,6 +757,14 @@
               <div class="logrow" style="--c:#D97706; margin:0">
                 <b>地铁 12 号线金海路站客流引导</b> <em>浦东新区 · 2.4 km</em><br>
                 10-28 16:30-19:30 · 3.0h · 余 8 · 报名→上海志愿者网
+              </div>
+              <div class="logrow" style="--c:#0D9488; margin:0">
+                <b>上海图书馆东馆阅读引导</b> <em>浦东新区 · 11.6 km</em><br>
+                10-30 09:00-12:00 · 3.0h · 余 12 · 报名→上海图书馆
+              </div>
+              <div class="logrow" style="--c:#7C3AED; margin:0">
+                <b>静安区为老送餐志愿服务</b> <em>静安区 · 20.9 km</em><br>
+                11-01 10:30-13:30 · 3.0h · 余 6 · 报名→上海志愿者网
               </div>
             </div>
           </div>
@@ -811,8 +890,9 @@ streamlit run app.py</div>
         <div class="card rv" style="--c:#7C3AED; --d:.26s; padding:.9rem 1.1rem">
           <div class="badge" style="--c:#7C3AED">本项目新增</div>
           <ul style="font-size:.78rem; margin-top:.2rem">
-            <li><b>三个业务工具</b>：入参、返回结构、异常分支均自行设计</li>
+            <li><b>五个业务工具</b>：入参、返回结构、异常分支均自行设计（含活动查询与记录录入）</li>
             <li><b>业务数据层</b>：模拟表、条件筛选、按姓名分组、Excel 生成</li>
+            <li><b>身份与绑定</b>：个人账号自动带入姓名学号，绑定学校驱动活动推送</li>
             <li><b>稳定性处理</b>：限流退避重试、备用模型、参数格式拦截</li>
             <li><b>界面与可观测</b>：双栏布局、日志分区、结果表格、运行日志</li>
             <li><b>测试与交付</b>：AppTest 验证、依赖清单、环境模板、仓库提交</li>
