@@ -47,7 +47,11 @@ SYSTEM_PROMPT = (
     "返回 status 为 empty 时，提示该时间段没有查到记录。"
     "统计前必须先调用查询工具；导出前必须先完成统计。"
     "调用统计和导出工具时不要自己回传数据数组（省略 records / summary 参数即可），"
-    "工具会自动使用最近一次查询或统计的结果。回答请简洁、使用中文。"
+    "工具会自动使用最近一次查询或统计的结果。"
+    "当用户询问最近有什么志愿活动、校内活动、校外/附近活动时，调用 query_open_activities；"
+    "若该工具返回未绑定学校，请提示用户在页面左侧「学校绑定」中选择并绑定学校。"
+    "回答活动类问题时，请按距离或日期列出要点，并提醒报名截止与剩余名额。"
+    "回答请简洁、使用中文。"
 )
 
 # ============================ 模拟数据 ============================
@@ -64,10 +68,108 @@ DEFAULT_DATA = [
     {"姓名": "赵六", "学号": "2023004", "志愿项目": "图书馆图书整理", "日期": "2026-10-08", "时长(小时)": 3.0},
 ]
 
+# ============================ 学校与志愿活动数据 ============================
+# 可绑定学校（含坐标，用于计算校外活动距离）
+SCHOOLS = [
+    {"名称": "江城大学（本部）", "城市": "武汉", "校区": "本部校区", "lat": 30.5271, "lng": 114.3613},
+    {"名称": "江城大学（南湖校区）", "城市": "武汉", "校区": "南湖校区", "lat": 30.4877, "lng": 114.3402},
+    {"名称": "华光理工大学", "城市": "武汉", "校区": "光谷校区", "lat": 30.5123, "lng": 114.4102},
+    {"名称": "明德师范大学", "城市": "武汉", "校区": "桂子山校区", "lat": 30.5421, "lng": 114.2987},
+]
+
+# 校内活动（模拟“实时更新”：报名人数会随时间增长）
+ON_CAMPUS = [
+    {"id": "C101", "标题": "图书馆图书整理志愿岗", "主办": "校图书馆", "地点": "本部图书馆 3F 书库",
+     "日期": "2026-10-29", "时间段": "14:00-17:00", "时长": 3.0, "名额": 20, "已报名": 14,
+     "标签": ["图书管理", "室内"], "更新时间": 6},
+    {"id": "C102", "标题": "校运会赛事保障志愿者", "主办": "校体育运动委员会", "地点": "东区田径场",
+     "日期": "2026-10-31", "时间段": "08:00-12:00", "时长": 4.0, "名额": 40, "已报名": 37,
+     "标签": ["大型活动", "户外"], "更新时间": 12},
+    {"id": "C103", "标题": "实验室开放日引导员", "主办": "实验教学中心", "地点": "理学院实验楼 A 座",
+     "日期": "2026-11-02", "时间段": "09:00-12:00", "时长": 3.0, "名额": 12, "已报名": 5,
+     "标签": ["科普", "引导"], "更新时间": 25},
+    {"id": "C104", "标题": "无偿献血现场服务", "主办": "校医院 · 红十字会", "地点": "大学生活动中心 1 号厅",
+     "日期": "2026-11-05", "时间段": "10:00-16:00", "时长": 6.0, "名额": 25, "已报名": 11,
+     "标签": ["公益", "医疗协助"], "更新时间": 48},
+]
+
+# 校外活动（带经纬度，按绑定学校计算距离）
+OFF_CAMPUS = [
+    {"id": "O201", "标题": "社区敬老院陪伴服务", "主办": "江岸区青年志愿者协会", "地址": "江岸区解放大道 128 号",
+     "日期": "2026-10-30", "时间段": "09:00-12:00", "时长": 3.0, "名额": 15, "已报名": 9,
+     "标签": ["助老", "社区"], "lat": 30.6012, "lng": 114.3021, "更新时间": 8},
+    {"id": "O202", "标题": "地铁站文明引导服务", "主办": "市轨道交通志愿服务队", "地址": "地铁 2 号线街道口站",
+     "日期": "2026-11-01", "时间段": "16:00-19:00", "时长": 3.0, "名额": 20, "已报名": 12,
+     "标签": ["交通引导", "城市服务"], "lat": 30.5241, "lng": 114.3603, "更新时间": 15},
+    {"id": "O203", "标题": "城市书房周末伴读", "主办": "区图书馆", "地址": "武昌区图书馆少儿阅览室",
+     "日期": "2026-11-02", "时间段": "14:00-17:00", "时长": 3.0, "名额": 10, "已报名": 4,
+     "标签": ["伴读", "青少年"], "lat": 30.5468, "lng": 114.3162, "更新时间": 30},
+    {"id": "O204", "标题": "社区垃圾分类督导", "主办": "街道办事处城管科", "地址": "洪山区珞南街道 6 个投放点",
+     "日期": "2026-11-03", "时间段": "07:30-09:30", "时长": 2.0, "名额": 18, "已报名": 6,
+     "标签": ["环保", "社区治理"], "lat": 30.5102, "lng": 114.3721, "更新时间": 55},
+]
+
+# 定时注入的新活动（模拟推送到达）
+NEW_POOL = [
+    {"kind": "on", "id": "C105", "标题": "新生心理健康讲座协助", "主办": "心理健康教育中心", "地点": "学术报告厅",
+     "日期": "2026-11-06", "时间段": "18:30-21:00", "时长": 2.5, "名额": 8, "已报名": 1,
+     "标签": ["讲座协助", "室内"], "更新时间": 1},
+    {"kind": "off", "id": "O205", "标题": "社区儿童课业辅导", "主办": "希望工程志愿服务队", "地址": "硚口区汉正街社区服务中心",
+     "日期": "2026-11-07", "时间段": "09:00-11:30", "时长": 2.5, "名额": 12, "已报名": 3,
+     "标签": ["支教", "青少年"], "lat": 30.5781, "lng": 114.2654, "更新时间": 1},
+    {"kind": "on", "id": "C106", "标题": "校园反诈宣传摊位", "主办": "保卫处 · 学生会", "地点": "学生食堂西门广场",
+     "日期": "2026-11-08", "时间段": "11:00-13:00", "时长": 2.0, "名额": 10, "已报名": 2,
+     "标签": ["宣传", "安全"], "更新时间": 1},
+    {"kind": "off", "id": "O206", "标题": "江滩环保清洁行动", "主办": "绿色江城环保协会", "地址": "汉口江滩三阳广场",
+     "日期": "2026-11-09", "时间段": "08:00-11:00", "时长": 3.0, "名额": 30, "已报名": 8,
+     "标签": ["环保", "户外"], "lat": 30.5925, "lng": 114.3012, "更新时间": 1},
+]
+
+
+def haversine_km(lat1, lng1, lat2, lng2) -> float:
+    """两坐标间球面距离（公里），用于计算校外活动与学校的距离"""
+    from math import radians, sin, cos, asin, sqrt
+
+    lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
+    dlat, dlng = lat2 - lat1, lng2 - lng1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
+    return round(2 * 6371 * asin(sqrt(a)), 1)
+
+
+def tick_feed(force: bool = False):
+    """模拟活动实时更新：随时间推进报名人数、刷新“更新于 N 分钟”，并定时注入新活动"""
+    import random
+    from datetime import datetime as _dt
+
+    now = _dt.now()
+    last = st.session_state.get("feed_tick_at")
+    # 距上次更新不足 25 秒且非手动刷新，则跳过（避免频繁跳动）
+    if not force and last and (now - last).total_seconds() < 25:
+        return
+    st.session_state.feed_tick_at = now
+
+    for key in ("activities_on", "activities_off"):
+        for a in st.session_state[key]:
+            a["更新时间"] = a.get("更新时间", 0) + random.randint(0, 3)
+            if a["已报名"] < a["名额"] and random.random() < 0.55:
+                a["已报名"] = min(a["名额"], a["已报名"] + random.randint(1, 2))
+
+    # 每累计两次轮询注入一条新活动，模拟推送到达
+    st.session_state.feed_polls = st.session_state.get("feed_polls", 0) + 1
+    if st.session_state.feed_polls % 2 == 0:
+        used = st.session_state.get("feed_pool_used", 0)
+        if used < len(NEW_POOL):
+            item = dict(NEW_POOL[used])
+            item["更新时间"] = 1
+            st.session_state["activities_" + ("on" if item["kind"] == "on" else "off")].insert(0, item)
+            st.session_state.feed_pool_used = used + 1
+            st.session_state.new_push = item["标题"]
+
 TOOL_ICON = {
     "query_volunteer_data": "🔍",
     "calc_total_hours": "🧮",
     "export_volunteer_excel": "📤",
+    "query_open_activities": "🏫",
 }
 STATUS_COLOR = {"success": "#22C55E", "error": "#EF4444", "empty": "#F59E0B"}
 STATUS_LABEL = {"success": "成功", "error": "异常", "empty": "空结果"}
@@ -110,6 +212,23 @@ def init_state():
         st.session_state.last_summary = None     # 最近一次统计结果（用于柱状图）
     if "toast" not in st.session_state:
         st.session_state.toast = None            # 一次性提示
+    # —— 学校绑定与活动推送 ——
+    if "bound_school" not in st.session_state:
+        st.session_state.bound_school = None     # 当前绑定的学校（含坐标）
+    if "activities_on" not in st.session_state:
+        st.session_state.activities_on = [dict(a) for a in ON_CAMPUS]
+    if "activities_off" not in st.session_state:
+        st.session_state.activities_off = [dict(a) for a in OFF_CAMPUS]
+    if "feed_pool_used" not in st.session_state:
+        st.session_state.feed_pool_used = 0      # 已注入的新活动数量
+    if "feed_tick_at" not in st.session_state:
+        st.session_state.feed_tick_at = None     # 上次更新时间
+    if "feed_polls" not in st.session_state:
+        st.session_state.feed_polls = 0
+    if "push_radius" not in st.session_state:
+        st.session_state.push_radius = 5.0       # 校外推送半径（公里）
+    if "new_push" not in st.session_state:
+        st.session_state.new_push = None         # 新推送提示
 
 
 # ============================ 工具实现 ============================
@@ -208,10 +327,79 @@ def export_volunteer_excel(summary: list = None) -> dict:
         return {"status": "error", "message": f"导出失败：{e}"}
 
 
+def query_open_activities(scope: str = "all", radius_km: float = 5.0, keyword: str = "") -> dict:
+    """工具4：查询校内正在招募的志愿活动，以及校园周边校外活动（按距离由近到远）"""
+    school = st.session_state.get("bound_school")
+    if not school:
+        return {
+            "status": "error",
+            "message": "尚未绑定学校。请先在左侧「学校绑定」中选择学校并点击绑定，再查询活动。",
+        }
+
+    kw = str(keyword or "").strip()
+    scope_raw = str(scope or "all").lower()
+    if scope_raw in ("on_campus", "on", "校内", "campus"):
+        want_on, want_off = True, False
+    elif scope_raw in ("off_campus", "off", "校外", "nearby"):
+        want_on, want_off = False, True
+    else:
+        want_on, want_off = True, True
+
+    try:
+        radius = float(radius_km) if radius_km is not None else 5.0
+    except (TypeError, ValueError):
+        radius = 5.0
+
+    def _match(act):
+        if not kw:
+            return True
+        blob = " ".join(
+            [str(act.get("标题", "")), str(act.get("主办", "")), " ".join(act.get("标签", []))]
+        )
+        return kw in blob
+
+    on_list, off_list = [], []
+    if want_on:
+        for a in st.session_state.activities_on:
+            if _match(a):
+                on_list.append({
+                    "标题": a["标题"], "主办": a["主办"], "地点": a["地点"],
+                    "日期": a["日期"], "时间段": a["时间段"], "时长(小时)": a["时长"],
+                    "剩余名额": max(0, a["名额"] - a["已报名"]), "标签": a["标签"],
+                })
+    if want_off:
+        for a in st.session_state.activities_off:
+            dist = haversine_km(school["lat"], school["lng"], a["lat"], a["lng"])
+            if dist <= radius and _match(a):
+                off_list.append({
+                    "标题": a["标题"], "主办": a["主办"], "地址": a["地址"],
+                    "距离km": dist, "日期": a["日期"], "时间段": a["时间段"],
+                    "时长(小时)": a["时长"], "剩余名额": max(0, a["名额"] - a["已报名"]),
+                    "标签": a["标签"],
+                })
+        off_list.sort(key=lambda x: x["距离km"])
+
+    if not on_list and not off_list:
+        return {
+            "status": "empty",
+            "message": f"在「{school['名称']}」附近未找到符合条件的活动"
+                       f"（关键词：{kw or '无'}，校外半径 {radius} km）。可放宽半径或换个关键词再试。",
+        }
+
+    return {
+        "status": "success",
+        "school": {"名称": school["名称"], "城市": school["城市"], "校区": school["校区"]},
+        "on_campus": on_list,
+        "off_campus": off_list,
+        "message": f"校内 {len(on_list)} 个、校外 {len(off_list)} 个活动正在招募（校外半径 {radius} km）。",
+    }
+
+
 TOOL_IMPL = {
     "query_volunteer_data": query_volunteer_data,
     "calc_total_hours": calc_total_hours,
     "export_volunteer_excel": export_volunteer_excel,
+    "query_open_activities": query_open_activities,
 }
 
 # 工具 Schema：交给通义千问，由模型自主决定何时调用（真实 Tool Calling）
@@ -262,6 +450,31 @@ TOOLS_SCHEMA = [
                         "description": "可选。统计结果数组；一般省略，省略时自动使用最近一次统计结果",
                         "items": {"type": "object"},
                     }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_open_activities",
+            "description": "查询当前绑定学校可报名的志愿活动：校内活动列表，以及校园周边校外活动（按距离由近到远）。需要用户已绑定学校；未绑定时提示先去绑定。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope": {
+                        "type": "string",
+                        "enum": ["all", "on_campus", "off_campus"],
+                        "description": "查询范围：all 全部 / on_campus 仅校内 / off_campus 仅校外",
+                    },
+                    "radius_km": {
+                        "type": "number",
+                        "description": "校外活动搜索半径（公里），默认 5",
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "可选。按标题、主办方或标签过滤，例如 助老、环保",
+                    },
                 },
             },
         },
@@ -697,6 +910,75 @@ GLOBAL_CSS = """
     border-radius: 999px; padding: 5px 14px; font-size: 12.5px; color: #2B6CB0;
     margin-right: 6px; margin-bottom: 4px;
   }
+
+  /* ---------- 学校绑定状态条 ---------- */
+  .school-strip {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: linear-gradient(120deg, #0F2B46 0%, #1B4E6E 60%, #16697A 100%);
+    border-radius: 14px; padding: 16px 22px; margin: 6px 0 16px; color: #fff;
+    box-shadow: 0 6px 20px rgba(15, 43, 70, .22);
+  }
+  .school-strip.unbound {
+    background: #FFF8E6; border: 1.5px dashed #E2B93B; box-shadow: none;
+  }
+  .school-strip.unbound .ss-label { color: #B7791F; }
+  .school-strip.unbound .ss-name { color: #7B5804; }
+  .school-strip.unbound .ss-sub { color: #A17A1E; }
+  .ss-left { display: flex; flex-direction: column; gap: 3px; }
+  .ss-label { font-size: 11px; letter-spacing: 2px; color: #9FC6E0; font-weight: 700; }
+  .ss-name { font-size: 19px; font-weight: 800; letter-spacing: .4px; }
+  .ss-sub { font-size: 12px; color: #B9D4E6; }
+  .ss-right { display: flex; gap: 26px; }
+  .ss-right > div { text-align: center; }
+  .ss-right b {
+    display: block; font-size: 19px; font-weight: 800; color: #fff; font-family: Consolas, monospace;
+  }
+  .ss-right span { font-size: 11px; color: #A9C8DC; }
+
+  .school-chip {
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28);
+    border-radius: 10px; padding: 7px 10px; margin-top: 6px;
+    font-size: 12.5px; font-weight: 700; color: #fff;
+  }
+  .school-chip span { display: block; font-size: 11px; font-weight: 400; color: #A8C3E8; margin-top: 2px; }
+
+  /* ---------- 活动卡片 ---------- */
+  .act-card {
+    background: #fff; border: 1px solid #E6ECF3; border-left: 4px solid #38A169;
+    border-radius: 12px; padding: 12px 16px; margin-bottom: 10px;
+    box-shadow: 0 2px 8px rgba(45,55,72,.05);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .act-card:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(45,55,72,.10); }
+  .act-card.off { border-left-color: #DD6B20; }
+  .act-head { display: flex; align-items: center; gap: 8px; }
+  .act-title { font-size: 14.5px; font-weight: 800; color: #1A202C; }
+  .act-hours {
+    margin-left: auto; font-family: Consolas, monospace; font-size: 13px; font-weight: 800;
+    color: #2B6CB0; background: #EBF8FF; border-radius: 6px; padding: 1px 8px;
+  }
+  .badge-new {
+    font-size: 10px; font-weight: 800; letter-spacing: .6px; color: #fff;
+    background: linear-gradient(135deg, #E53E3E, #F56565); border-radius: 4px; padding: 1px 6px;
+  }
+  .badge-full {
+    font-size: 10px; font-weight: 800; color: #718096; background: #EDF2F7;
+    border-radius: 4px; padding: 1px 6px;
+  }
+  .act-meta { font-size: 12px; color: #718096; margin-top: 4px; }
+  .act-grid {
+    display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 7px;
+    font-size: 12px; color: #4A5568;
+  }
+  .act-dist { color: #C05621; font-weight: 700; }
+  .act-fresh { color: #A0AEC0; }
+  .act-bar { height: 5px; background: #EDF2F7; border-radius: 99px; margin-top: 9px; overflow: hidden; }
+  .act-bar i { display: block; height: 100%; background: linear-gradient(90deg, #4299E1, #38B2AC); border-radius: 99px; }
+  .act-tags { margin-top: 8px; }
+  .tagx {
+    display: inline-block; font-size: 11px; color: #2C7A7B; background: #E6FFFA;
+    border-radius: 99px; padding: 1px 9px; margin-right: 5px;
+  }
 </style>
 """
 
@@ -840,6 +1122,179 @@ def render_download():
         )
 
 
+# ============================ 学校绑定 / 活动中心 ============================
+def render_school_bind():
+    """侧栏：绑定、切换、解除学校"""
+    st.markdown("**🏫 学校绑定**")
+    names = [s["名称"] for s in SCHOOLS]
+    cur = st.session_state.get("bound_school")
+    idx = names.index(cur["名称"]) if cur and cur["名称"] in names else 0
+    pick = st.selectbox("选择学校", names, index=idx, key="school_picker")
+
+    c1, c2 = st.columns(2)
+    if c1.button("绑定 / 切换", use_container_width=True, key="bind_btn"):
+        school = next(s for s in SCHOOLS if s["名称"] == pick)
+        st.session_state.bound_school = dict(school)
+        st.session_state.toast = (
+            "success",
+            f"已绑定 {school['名称']}（{school['城市']} · {school['校区']}）",
+        )
+        st.rerun()
+    if c2.button("解除绑定", use_container_width=True, key="unbind_btn"):
+        st.session_state.bound_school = None
+        st.session_state.toast = ("success", "已解除学校绑定。")
+        st.rerun()
+
+    if cur:
+        st.markdown(
+            f'<div class="school-chip">✅ {cur["名称"]}'
+            f'<span>{cur["城市"]} · {cur["校区"]} · {cur["lat"]:.3f}, {cur["lng"]:.3f}</span></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("⚠️ 未绑定：校内活动与校外推送不可用")
+
+
+def render_school_strip():
+    """顶部：学校绑定状态条"""
+    cur = st.session_state.get("bound_school")
+    if not cur:
+        st.markdown(
+            """
+            <div class="school-strip unbound">
+              <div class="ss-left">
+                <span class="ss-label">未绑定学校</span>
+                <span class="ss-name">绑定后可查看校内实时活动与校园周边推送</span>
+                <span class="ss-sub">入口：左侧边栏「学校绑定」→ 选择学校 → 点击「绑定 / 切换」</span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    on_n = len(st.session_state.activities_on)
+    off_n = len(st.session_state.activities_off)
+    dists = [
+        haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"])
+        for a in st.session_state.activities_off
+    ]
+    near = f"{min(dists):.1f} km" if dists else "—"
+    st.markdown(
+        f"""
+        <div class="school-strip">
+          <div class="ss-left">
+            <span class="ss-label">已绑定学校</span>
+            <span class="ss-name">{cur["名称"]}</span>
+            <span class="ss-sub">{cur["城市"]} · {cur["校区"]} · 坐标 {cur["lat"]:.4f}, {cur["lng"]:.4f}</span>
+          </div>
+          <div class="ss-right">
+            <div><b>{on_n}</b><span>校内活动</span></div>
+            <div><b>{off_n}</b><span>校外推送</span></div>
+            <div><b>{near}</b><span>最近校外活动</span></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_activity_card(a: dict, kind: str, dist: float = None):
+    """单个活动卡片（校内 kind=on / 校外 kind=off）"""
+    left = max(0, a["名额"] - a["已报名"])
+    pct = int(a["已报名"] / a["名额"] * 100) if a.get("名额") else 0
+    is_new = a.get("更新时间", 99) <= 2
+    tags = "".join(f'<span class="tagx">{t}</span>' for t in a.get("标签", []))
+    place = a.get("地点") or a.get("地址", "")
+    place_label = "地点" if kind == "on" else "地址"
+    dist_html = f'<span class="act-dist">📍 距校区 {dist:.1f} km</span>' if dist is not None else ""
+    new_html = '<span class="badge-new">NEW</span>' if is_new else ""
+    full_html = '<span class="badge-full">已满</span>' if left == 0 else ""
+    st.markdown(
+        f"""
+        <div class="act-card {kind}">
+          <div class="act-head">
+            <span class="act-title">{a["标题"]}</span>{new_html}{full_html}
+            <span class="act-hours">{a["时长"]:g} h</span>
+          </div>
+          <div class="act-meta">{a["主办"]} · {place_label}：{place}</div>
+          <div class="act-grid">
+            <span>🗓 {a["日期"]}　{a["时间段"]}</span>
+            {dist_html}
+            <span>👥 已报名 {a["已报名"]}/{a["名额"]}（余 {left}）</span>
+            <span class="act-fresh">更新于 {a.get("更新时间", 0)} 分钟前</span>
+          </div>
+          <div class="act-bar"><i style="width:{pct}%"></i></div>
+          <div class="act-tags">{tags}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_activities():
+    """活动中心：校内实时活动 + 校外按距离推送"""
+    _panel_title("🏫", "#0D9488", "志愿活动中心", "校内实时更新 · 校外按距离推送")
+    cur = st.session_state.get("bound_school")
+    if not cur:
+        st.markdown(
+            '<div class="empty-box"><span class="big">🏫</span>'
+            "尚未绑定学校<br>请先在左侧边栏「学校绑定」中选择并绑定学校</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    c1, c2, c3 = st.columns([0.9, 1.3, 2.0])
+    auto = c2.toggle("自动刷新", value=True, key="feed_auto")
+    if auto:
+        tick_feed()  # 时间驱动的模拟实时更新（25 秒节流）
+    if c1.button("🔄 刷新活动", use_container_width=True, key="refresh_feed"):
+        tick_feed(force=True)
+        st.session_state.toast = ("success", "活动列表已更新。")
+        st.rerun()
+    last = st.session_state.get("feed_tick_at")
+    c3.caption(
+        "最近更新：" + (last.strftime("%H:%M:%S") if last else "—") + "　（活动数据为模拟实时流）"
+    )
+
+    if st.session_state.get("new_push"):
+        st.info(f"📬 新活动推送：{st.session_state.new_push}")
+        st.session_state.new_push = None
+
+    on_tab, off_tab = st.tabs(
+        [
+            f"🏫 校内活动（{len(st.session_state.activities_on)}）",
+            f"📍 校外推送（{len(st.session_state.activities_off)}）",
+        ]
+    )
+    with on_tab:
+        for a in sorted(st.session_state.activities_on, key=lambda x: x["日期"]):
+            render_activity_card(a, "on")
+    with off_tab:
+        radius = st.slider(
+            "推送半径（公里）", min_value=1.0, max_value=15.0,
+            value=float(st.session_state.push_radius), step=0.5,
+            key="radius_slider",
+        )
+        st.session_state.push_radius = radius
+        rows = []
+        for a in st.session_state.activities_off:
+            d = haversine_km(cur["lat"], cur["lng"], a["lat"], a["lng"])
+            if d <= radius:
+                rows.append((d, a))
+        rows.sort(key=lambda x: x[0])
+        if not rows:
+            st.markdown(
+                '<div class="empty-box"><span class="big">📍</span>'
+                "该半径内暂无校外活动<br>可适当调大半径</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption(f"半径 {radius:.1f} km 内共 {len(rows)} 个活动，按距离由近到远排列")
+        for d, a in rows:
+            render_activity_card(a, "off", d)
+
+
 def render_sidebar():
     with st.sidebar:
         st.markdown(
@@ -852,6 +1307,10 @@ def render_sidebar():
             """,
             unsafe_allow_html=True,
         )
+
+        # ---- 学校绑定（置顶） ----
+        render_school_bind()
+        st.divider()
 
         # ---- 数据表 ----
         st.markdown("**📋 当前数据表**（模拟数据 · 可追加）")
@@ -1050,19 +1509,25 @@ def main():
     render_header()
     render_stats()
     render_sidebar()
+    render_school_strip()
 
-    # 双栏布局：左侧对话区，右侧日志 + 可视化 + 导出
-    left, right = st.columns([0.58, 0.42], gap="medium")
+    # 双栏：左侧对话，右侧「工具日志 / 结果与导出」双页签
+    left, right = st.columns([0.56, 0.44], gap="medium")
     with left:
         render_chat()
     with right:
-        render_tool_logs()
-        st.divider()
-        render_results()
-        st.divider()
-        render_chart()
-        st.divider()
-        render_download()
+        tab_log, tab_result = st.tabs(["🧾 工具日志", "📊 结果与导出"])
+        with tab_log:
+            render_tool_logs()
+        with tab_result:
+            render_results()
+            st.divider()
+            render_chart()
+            st.divider()
+            render_download()
+
+    st.divider()
+    render_activities()
 
     user_input = st.chat_input("💬 输入需求，例如：统计9月以来每个人的志愿总时长并导出Excel")
     pending = st.session_state.pop("pending_input", None) or user_input

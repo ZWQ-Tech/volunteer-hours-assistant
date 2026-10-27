@@ -223,6 +223,7 @@
     background: #0E1A26; border-radius: .4rem; padding: .8rem .95rem;
     font-family: Consolas, monospace; font-size: .7rem; line-height: 1.75;
     color: #CBD8E2; text-align: left; overflow: hidden;
+    white-space: pre-wrap; word-break: break-word;
   }
   .code .k { color: #7FB6E8; }
   .code .s { color: #A8DB8A; }
@@ -253,11 +254,14 @@
   .mock .bar {
     display: flex; align-items: center; gap: .35rem; padding: .4rem .6rem;
     background: #fff; border-bottom: .05rem solid var(--line);
+    flex-direction: row; justify-content: flex-start;
+    width: 100%; height: auto;
   }
-  .mock .bar i { width: .42rem; height: .42rem; border-radius: 50%; display: block; }
+  .mock .bar i { width: .42rem; height: .42rem; border-radius: 50%; display: block; flex: none; }
   .mock .bar .u {
-    flex: 1; margin-left: .5rem; font-family: Consolas, monospace; font-size: .58rem;
+    flex: 1; min-width: 0; margin-left: .5rem; font-family: Consolas, monospace; font-size: .58rem;
     color: var(--muted); background: #F1F5F9; border-radius: 99rem; padding: .16rem .6rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
   }
   .mock .body { display: grid; grid-template-columns: 1.15fr 1fr; gap: .55rem; padding: .6rem; }
   .mock .panel { background: #fff; border: .05rem solid var(--line); border-radius: .35rem; padding: .5rem .55rem; }
@@ -362,11 +366,11 @@
       <h1 class="rv" style="--d:.18s">校园志愿时长汇总助手</h1>
       <div class="sub rv" style="--d:.32s">
         Streamlit × 通义千问 Tool Calling<br>
-        用一句话完成「查询 · 统计 · 导出报表」
+        用一句话完成「查询 · 统计 · 导出报表」，并推送身边的志愿活动
       </div>
       <div class="chips rv" style="--d:.46s">
-        <span class="chip">3 个业务工具</span>
-        <span class="chip">真实 Function Calling</span>
+        <span class="chip">4 个业务工具</span>
+        <span class="chip">绑定学校 · 活动推送</span>
         <span class="chip">网页内导出 Excel</span>
         <span class="chip">工具调用可视化</span>
       </div>
@@ -421,7 +425,7 @@
   <section class="slide" style="--ac:#7C3AED">
     <div class="hd">
       <div class="kicker">02 · 方案</div>
-      <h2>把一条固定业务链路<em>交给 Agent</em>执行</h2>
+      <h2>把重复劳动<em>交给 Agent</em>执行</h2>
       <div class="dek">模型只做两件事：理解要什么、决定按什么顺序调用哪个工具；计算与出表全部在本地完成</div>
     </div>
 
@@ -447,8 +451,25 @@
         </div>
       </div>
 
-      <div class="note rv" style="--d:.4s; margin-top:1.15rem">
-        <b>范围界定：</b>面向校团委与院系志愿负责人，单机运行，数据为课程自建模拟数据
+      <div class="cards2 rv" style="--d:.38s; margin-top:1.1rem; align-items:stretch">
+        <div class="card top" style="--c:#2563EB">
+          <div class="badge" style="--c:#2563EB">链路一 · 时长统计</div>
+          <div class="cd">
+            查询 → 统计 → 导出，一句话串起三个工具；<br>
+            适合期末汇总、按项目核对、出报表归档
+          </div>
+        </div>
+        <div class="card top" style="--c:#7C3AED">
+          <div class="badge" style="--c:#7C3AED">链路二 · 活动发现</div>
+          <div class="cd">
+            绑定学校 → <code>query_open_activities</code> 一次调用返回结果；<br>
+            校内看实时刷新，校外按距离近远排队
+          </div>
+        </div>
+      </div>
+
+      <div class="note rv" style="--d:.44s; margin-top:.9rem">
+        <b>范围界定：</b>面向校团委与院系志愿负责人，单机运行，两个链路的业务数据均为课程自建模拟数据
       </div>
     </div>
     <div class="pageno"><span class="pn">03</span> / 12</div>
@@ -466,7 +487,7 @@
       <div class="arch">
         <div class="layer rv" style="--c:#2563EB; --d:.02s">
           <span class="ln">A</span><span class="nm">交互层</span>
-          <span class="ds">Streamlit 页面：对话区 · 工具日志 · 结果表格 · 柱状图 · 下载按钮</span>
+          <span class="ds">Streamlit 页面：对话区 · 工具日志 · 结果表格 · 柱状图 · 下载按钮 · 活动中心</span>
         </div>
         <div class="vstep rv" style="--d:.08s">用户输入文本，提交到 st.chat_input</div>
 
@@ -484,13 +505,13 @@
 
         <div class="layer rv" style="--c:#D97706; --d:.38s">
           <span class="ln">D</span><span class="nm">工具层</span>
-          <span class="ds">三个本地函数：查询 / 统计 / 导出，执行后以 JSON 回填，形成下一轮上下文</span>
+          <span class="ds">四个本地函数：查询 / 统计 / 导出 / 活动查询，执行后以 JSON 回填，形成下一轮上下文</span>
         </div>
-        <div class="vstep rv" style="--d:.44s">pandas 筛选与分组 · openpyxl 写出文件</div>
+        <div class="vstep rv" style="--d:.44s">pandas 筛选与分组 · openpyxl 写出文件 · Haversine 算距离</div>
 
         <div class="layer rv" style="--c:#0D9488; --d:.5s">
           <span class="ln">E</span><span class="nm">数据层</span>
-          <span class="ds">内存数据表 <code>st.session_state.volunteer_df</code>（10 条记录）+ 最近结果缓存</span>
+          <span class="ds">内存数据表 <code>st.session_state.volunteer_df</code>（10 条记录）+ 学校与活动池 + 最近结果缓存</span>
         </div>
       </div>
     </div>
@@ -520,7 +541,7 @@
       </div>
 
       <div class="note rv" style="--d:.48s; margin-top:1rem">
-        全流程约 3 次模型请求。日志区保留每次调用的工具名、入参、状态与结果摘要。
+        全流程约 3 次模型请求。若问的是活动（如"附近 3 公里有环保活动吗"），则走单轮分支：直接调用 <b>query_open_activities</b> 并返回距离排序结果。
       </div>
     </div>
     <div class="pageno"><span class="pn">05</span> / 12</div>
@@ -530,13 +551,13 @@
   <section class="slide" style="--ac:#2563EB">
     <div class="hd">
       <div class="kicker">05 · 工具设计</div>
-      <h2>三个工具的<em>入参、返回与取舍</em></h2>
+      <h2>四个工具的<em>入参、返回与取舍</em></h2>
       <div class="dek">工具均为项目内自行实现，参数结构直接决定模型能否稳定调用</div>
     </div>
 
     <div class="wrap">
-      <div class="cards3">
-        <div class="tool rv" style="--c:#2563EB; --d:.02s">
+      <div class="cards3" style="grid-template-columns:repeat(4,1fr); gap:.7rem">
+        <div class="tool rv" style="--c:#2563EB; --d:.02s; padding:.8rem .7rem .7rem">
           <div class="ic">Q</div>
           <div class="nm">query_volunteer_data</div>
           <div class="pr">
@@ -546,7 +567,7 @@
           </div>
           <div class="rt">{ status, count, message, records[] }<br>status: success / empty / error</div>
         </div>
-        <div class="tool rv" style="--c:#0D9488; --d:.12s">
+        <div class="tool rv" style="--c:#0D9488; --d:.12s; padding:.8rem .7rem .7rem">
           <div class="ic">Σ</div>
           <div class="nm">calc_total_hours</div>
           <div class="pr">
@@ -555,7 +576,7 @@
           </div>
           <div class="rt">{ status, summary[{姓名, 总时长, 参与次数}], 总计 }</div>
         </div>
-        <div class="tool rv" style="--c:#D97706; --d:.22s">
+        <div class="tool rv" style="--c:#D97706; --d:.22s; padding:.8rem .7rem .7rem">
           <div class="ic">↓</div>
           <div class="nm">export_volunteer_excel</div>
           <div class="pr">
@@ -564,35 +585,45 @@
           </div>
           <div class="rt">{ status, filename, message }</div>
         </div>
+        <div class="tool rv" style="--c:#7C3AED; --d:.32s; padding:.8rem .7rem .7rem">
+          <div class="ic">📍</div>
+          <div class="nm">query_open_activities</div>
+          <div class="pr">
+            <b>scope</b> 可选 · 校内/校外<br>
+            <b>radius_km</b> 可选 · 默认 5<br>
+            <b>keyword</b> 可选
+          </div>
+          <div class="rt">{ status, school, on_campus[], off_campus[] }<br>校外按距离升序</div>
+        </div>
       </div>
 
-      <div class="cards2 rv" style="--d:.36s; margin-top:1rem; align-items:start">
-        <div class="code">
-<span class="c"># 交给模型的工具定义（节选）</span>
-<span class="k">"function"</span>: {
-  <span class="k">"name"</span>: <span class="s">"query_volunteer_data"</span>,
-  <span class="k">"parameters"</span>: {
-    <span class="k">"properties"</span>: {
-      <span class="k">"start_date"</span>: {<span class="k">"type"</span>: <span class="s">"string"</span>},
-      <span class="k">"end_date"</span>:   {<span class="k">"type"</span>: <span class="s">"string"</span>},
-      <span class="k">"project_name"</span>: {<span class="k">"type"</span>: <span class="s">"string"</span>}
-    },
-    <span class="k">"required"</span>: [<span class="s">"start_date"</span>, <span class="s">"end_date"</span>]
-  }
-}
-        </div>
+      <div class="cards2 rv" style="--d:.36s; margin-top:.85rem; align-items:start">
+        <div class="code"><span class="c"># 工具定义（节选）</span>
+<span class="k">"name"</span>: <span class="s">"query_open_activities"</span>,
+<span class="k">"parameters"</span>: {
+  <span class="k">"properties"</span>: {
+    <span class="k">"scope"</span>:     {<span class="k">"enum"</span>: [<span class="s">"all"</span>,<span class="s">"on_campus"</span>,<span class="s">"off_campus"</span>]},
+    <span class="k">"radius_km"</span>: {<span class="k">"type"</span>: <span class="s">"number"</span>},
+    <span class="k">"keyword"</span>:   {<span class="k">"type"</span>: <span class="s">"string"</span>}
+  },
+  <span class="k">"required"</span>: []
+}</div>
         <div>
-          <div class="card top" style="--c:#0D9488; margin-bottom:.55rem">
+          <div class="card top" style="--c:#0D9488; margin-bottom:.5rem">
             <div class="ct">取舍一 · 可选参数</div>
             <div class="cd">用户不必说全条件，模型可采用默认行为</div>
           </div>
-          <div class="card top" style="--c:#7C3AED; margin-bottom:.55rem">
+          <div class="card top" style="--c:#7C3AED; margin-bottom:.5rem">
             <div class="ct">取舍二 · 数据不回传</div>
             <div class="cd">统计与导出省略数组参数，避免长 JSON 被截断导致 400</div>
           </div>
-          <div class="card top" style="--c:#D97706">
+          <div class="card top" style="--c:#D97706; margin-bottom:.5rem">
             <div class="ct">取舍三 · 状态三值</div>
             <div class="cd">success / empty / error 让模型分别给出结果、提示或修正建议</div>
+          </div>
+          <div class="card top" style="--c:#2563EB">
+            <div class="ct">取舍四 · 距离不由模型算</div>
+            <div class="cd">半径与排序交给 Haversine 公式，防止模型编造距离</div>
           </div>
         </div>
       </div>
@@ -604,8 +635,8 @@
   <section class="slide" style="--ac:#7C3AED">
     <div class="hd">
       <div class="kicker">06 · 功能演示</div>
-      <h2>三块区域：<em>提问记录 · 工具日志 · 结果输出</em></h2>
-      <div class="dek">下图按实际页面结构绘制：左上提问、右上工具调用、右下结果与下载</div>
+      <h2>界面四块：<em>提问 · 日志 · 结果 · 活动中心</em></h2>
+      <div class="dek">上两栏为对话与工具日志，底部活动中心分「校内」「校外」两页签，校外按距离升序</div>
     </div>
 
     <div class="wrap">
@@ -644,9 +675,22 @@
             </div>
             <div class="minibtn">⬇ 下载 志愿时长汇总.xlsx</div>
           </div>
+          <div class="panel" style="grid-column:1 / -1">
+            <div class="ptitle">活动中心 · 已绑定「江城大学（本部）」 · 校内 4 项 / 校外 4 项</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.4rem">
+              <div class="logrow" style="--c:#22C55E; margin:0">
+                <b>校园图书馆图书整理</b> <em>NEW</em><br>
+                10-28 14:00-17:00 · 3.0h · 已报 24/30
+              </div>
+              <div class="logrow" style="--c:#D97706; margin:0">
+                <b>社区垃圾分类宣传</b> <em>2.1 km</em><br>
+                10-29 09:00-13:00 · 4.0h · 已报 11/20
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="small rv" style="--d:.2s; text-align:center; margin-top:.55rem">
+      <div class="small rv" style="--d:.2s; text-align:center; margin-top:.4rem">
         图示为界面结构与真实内容；答辩时可直接切到程序演示同一流程
       </div>
     </div>
@@ -721,12 +765,10 @@
       </div>
 
       <div class="cards2 rv" style="--d:.42s; margin-top:.95rem; align-items:start">
-        <div class="code" style="font-size:.72rem">
-<span class="c"># 三步启动</span>
+        <div class="code" style="font-size:.72rem"><span class="c"># 三步启动</span>
 pip install -r requirements.txt
 copy .env.example .env      <span class="c"># 填入自己的 Key</span>
-streamlit run app.py
-        </div>
+streamlit run app.py</div>
         <div class="card" style="--d:.46s">
           <div class="ct">工程约定</div>
           <div class="cd">
@@ -808,7 +850,10 @@ streamlit run app.py
         </div>
       </div>
 
-      <div class="note rv" style="--d:.3s; margin-top:1rem">
+      <div class="note rv" style="--d:.3s; margin-top:.85rem">
+        <b>位置信息：</b>仅使用学校公开的校区经纬度估算活动直线距离，<b>不采集、不存储用户实时定位</b>；活动数据为课程自建模拟池。
+      </div>
+      <div class="note rv" style="--d:.36s; margin-top:.6rem">
         统计结果最终以学校志愿管理系统的原始记录为准；本工具用于减轻重复劳动，不替代认定流程。
       </div>
     </div>
@@ -831,6 +876,8 @@ streamlit run app.py
             数据存于内存，重启即恢复样例<br>
             单用户运行，无登录与多用户隔离<br>
             筛选维度有限，仅日期与项目名<br>
+            活动为本地模拟数据，非校方实时接口<br>
+            校外距离为直线估算，未接路网导航<br>
             相对时间依赖模型换算，偶有偏差<br>
             多次导出只保留最新一份，无留痕
           </div>
@@ -841,12 +888,26 @@ streamlit run app.py
             接入 SQLite，按学期归档数据<br>
             登录鉴权 + 提交、审核、归档三步流程<br>
             扩展工具：个人明细、月度趋势、未达标提醒<br>
+            对接校团委活动源与地图路线 API<br>
             容器化部署，支持多人同时访问
           </div>
         </div>
       </div>
 
-      <div class="rv" style="--d:.24s; margin-top:1.5rem; padding-top:1.15rem; border-top:.05rem solid var(--line); display:flex; justify-content:space-between; align-items:baseline; width:100%">
+      <div class="rv" style="--d:.2s; margin-top:1.1rem; width:100%">
+        <div style="text-align:center; font-size:.78rem; letter-spacing:.16em; font-weight:800; color:var(--ac); margin-bottom:.6rem">现场演示动线</div>
+        <div style="display:grid; grid-template-columns:1fr 2.2rem 1fr 2.2rem 1fr 2.2rem 1fr; gap:.4rem; align-items:center; width:100%">
+          <div class="card top" style="--c:#7C3AED; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">① 绑定学校</div><div class="cd" style="font-size:.72rem">左侧栏选校，顶部出现状态条</div></div>
+          <div style="text-align:center; color:var(--muted)">→</div>
+          <div class="card top" style="--c:#0D9488; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">② 看活动中心</div><div class="cd" style="font-size:.72rem">校内刷新、校外拖动半径</div></div>
+          <div style="text-align:center; color:var(--muted)">→</div>
+          <div class="card top" style="--c:#2563EB; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">③ 一句统计</div><div class="cd" style="font-size:.72rem">对话触发三次链式调用</div></div>
+          <div style="text-align:center; color:var(--muted)">→</div>
+          <div class="card top" style="--c:#D97706; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">④ 导出下载</div><div class="cd" style="font-size:.72rem">柱状图 + Excel 一键取走</div></div>
+        </div>
+      </div>
+
+      <div class="rv" style="--d:.28s; margin-top:1.2rem; padding-top:1.05rem; border-top:.05rem solid var(--line); display:flex; justify-content:space-between; align-items:baseline; width:100%">
         <div style="font-size:1.55rem; font-weight:800; color:var(--ink)">谢谢，欢迎提问</div>
         <div class="small mono">github.com/ZWQ-Tech/volunteer-hours-assistant</div>
       </div>
