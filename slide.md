@@ -119,7 +119,7 @@ E 数据层   内存数据表（10 条记录）+ 学校与活动池 + 最近结�
 
 | 工具 | 入参 | 返回 |
 | --- | --- | --- |
-| `query_volunteer_data` | `start_date` 必填 · `end_date` 必填 · `project_name` 可选 | `{status, count, message, records[]}` |
+| `query_volunteer_data` | `start_date` 必填 · `end_date` 必填 · `project_name` 可选 · `scope`（me 本人 / all 全员，默认 me） | `{status, scope, owner, count, records[]}` |
 | `calc_total_hours` | `records` 可选（省略取最近查询结果） | `{status, summary[{姓名,总时长,参与次数}], 总计}` |
 | `export_volunteer_excel` | `summary` 可选（省略取最近统计结果） | `{status, filename, message}` |
 | `query_open_activities` | `scope`（all/on_campus/off_campus）· `district`（上海各区，不传=全市）· `keyword`，全可选 | `{status, school, area, on_campus[], off_campus[]}` |
@@ -142,12 +142,13 @@ E 数据层   内存数据表（10 条记录）+ 学校与活动池 + 最近结�
 - 左：对话区（用户提问高亮编号，助手回答卡片）
 - 右上：工具调用日志（工具名 + 入参 + 状态 + 结果摘要）
 - 右下：结果明细表格 · 柱状图 · 导出下载按钮
+- 切换账号时，数据表 / KPI / 查询结果 / 导出文件同步切换，旧账号结果与对话会清空
 - 底部：活动中心（校内 / 上海全市校外两页签，可筛区、可搜索，卡片可展开看详情并跳转报名）
 
 **实际运行记录**
 
 ```
-query_volunteer_data    成功  入参 2026-09-01 ~ 2026-10-31  结果 共 10 条记录
+query_volunteer_data    成功  入参 2026-09-01 ~ 2026-10-31 · scope=all  结果 共 10 条记录
 calc_total_hours        成功  入参（省略 records）          结果 4 人 · 39.0 小时
 export_volunteer_excel  成功  结果 志愿时长汇总_215814.xlsx
 query_open_activities   成功  入参 scope=off_campus, district=浦东新区  结果 4 项，最近 2.4 km

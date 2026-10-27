@@ -50,6 +50,10 @@ SYSTEM_PROMPT = (
     "统计前必须先调用查询工具；导出前必须先完成统计。"
     "调用统计和导出工具时不要自己回传数据数组（省略 records / summary 参数即可），"
     "工具会自动使用最近一次查询或统计的结果。"
+    "查询记录时注意口径：用户说“我/我的/本人”或没有说明范围时，scope 传 me，只查当前登录账号本人的记录；"
+    "用户明确说“每个人/全员/全班/所有同学/大家”时，scope 传 all，查询全部成员记录。"
+    "若按本人口径查询，回答时说明“这是你本人的记录”，并提示如需全员记录可以直说。"
+    "若上一轮是按本人口径查询、本轮用户却要统计或导出全员，请先用 scope=all 重新查询一次再统计。"
     "当用户询问最近有什么志愿活动、校内活动、校外/上海全市活动时，调用 query_open_activities；"
     "该工具支持按 scope 区分校内/校外、按 district 限定上海某个区、按 keyword 过滤；"
     "若该工具返回未绑定学校，请提示用户在页面左侧「学校绑定」中选择并绑定学校。"
@@ -409,6 +413,8 @@ def init_state():
         st.session_state.excel_file = None       # (文件名, bytes)
     if "last_summary" not in st.session_state:
         st.session_state.last_summary = None     # 最近一次统计结果（用于柱状图）
+    if "last_owner" not in st.session_state:
+        st.session_state.last_owner = ""         # 最近一次查询的记录归属（本人 / 全员）
     if "toast" not in st.session_state:
         st.session_state.toast = None            # 一次性提示
     # —— 个人账号绑定 ——
@@ -449,15 +455,30 @@ def _parse_date(text):
         return None
 
 
-def query_volunteer_data(start_date: str, end_date: str, project_name: str = "") -> dict:
-    """工具1：按起止日期查询志愿记录，project_name 为可选的项目名称筛选关键字"""
+def query_volunteer_data(start_date: str, end_date: str, project_name: str = "",
+                         scope: str = "me") -> dict:
+    """工具1：按起止日期查询志愿记录。
+    scope=me 只查当前绑定账号本人的记录（默认，与页面记录口径保持一致）；
+    scope=all 查全部成员记录。project_name 为可选的项目名称筛选关键字。"""
     d1, d2 = _parse_date(start_date), _parse_date(end_date)
     if d1 is None or d2 is None:
         return {"status": "error", "message": "日期格式不正确，请使用 YYYY-MM-DD 格式，例如 2026-09-01。"}
     if d2 < d1:
         return {"status": "error", "message": f"结束日期({end_date})早于起始日期({start_date})，请调整后重新查询。"}
 
+    acc = get_bound_account()
+    want_all = str(scope or "me").strip().lower() in ("all", "全员", "everyone", "team")
+
     df = st.session_state.volunteer_df.copy()
+    if want_all:
+        owner_label = "全员"
+    elif acc:
+        # 只查本人：切换账号后这里会自然跟着变
+        df = df[df["姓名"] == acc["姓名"]]
+        owner_label = f"{acc['姓名']}（本人）"
+    else:
+        owner_label = "全员（未绑定账号）"
+
     df["日期date"] = df["日期"].map(_parse_date)
     mask = (df["日期date"] >= d1) & (df["日期date"] <= d2)
     if project_name:
@@ -466,12 +487,20 @@ def query_volunteer_data(start_date: str, end_date: str, project_name: str = "")
 
     if result.empty:
         tip = f"{start_date} 至 {end_date}" + (f"（项目含“{project_name}”）" if project_name else "")
-        return {"status": "empty", "message": f"在 {tip} 时间范围内没有查询到志愿记录。", "records": []}
+        return {
+            "status": "empty",
+            "scope": "all" if want_all else "me",
+            "owner": owner_label,
+            "message": f"{owner_label}在 {tip} 时间范围内没有志愿记录。",
+            "records": [],
+        }
 
     return {
         "status": "success",
+        "scope": "all" if want_all else "me",
+        "owner": owner_label,
         "count": int(len(result)),
-        "message": f"共查询到 {len(result)} 条志愿记录。",
+        "message": f"{owner_label}共查询到 {len(result)} 条志愿记录。",
         "records": result.to_dict(orient="records"),
     }
 
@@ -525,7 +554,10 @@ def export_volunteer_excel(summary: list = None) -> dict:
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="志愿时长汇总")
         excel_bytes = buf.getvalue()
-        filename = f"志愿时长汇总_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+        # 文件名带上记录归属，换账号后导出的表一眼能区分
+        owner = str(st.session_state.get("last_owner") or "").split("（")[0]
+        tag = f"_{owner}" if owner else ""
+        filename = f"志愿时长汇总{tag}_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
         st.session_state.excel_file = (filename, excel_bytes)  # 供页面下载按钮使用
         return {
             "status": "success",
@@ -637,6 +669,59 @@ def get_bound_account():
     return st.session_state.get("bound_account")
 
 
+def records_scope() -> str:
+    """当前记录展示口径：绑定账号后默认只看本人（me），勾选“显示全部”或未绑定时为全员（all）"""
+    if not get_bound_account():
+        return "all"
+    return "all" if st.session_state.get("show_all_rows") else "me"
+
+
+def view_df():
+    """按当前口径返回记录表——切换个人账号后，这里会自动跟着切到新账号"""
+    df = st.session_state.volunteer_df
+    acc = get_bound_account()
+    if acc and not st.session_state.get("show_all_rows"):
+        return df[df["姓名"] == acc["姓名"]]
+    return df
+
+
+def reset_record_views(keep_logs: bool = False):
+    """记录口径变了（换账号 / 新写入记录）就清掉旧的查询结果、统计、导出文件，
+    避免页面还显示上一个账号的数据"""
+    st.session_state.last_records = None
+    st.session_state.last_summary = None
+    st.session_state.last_owner = ""
+    st.session_state.excel_file = None
+    st.session_state.last_failed_input = None
+    if not keep_logs:
+        st.session_state.history = []
+        st.session_state.tool_logs = []
+
+
+def switch_account(acc, tip: str = ""):
+    """切换 / 绑定 / 退出登录的统一入口：账号与记录一起切换"""
+    old = get_bound_account()
+    st.session_state.bound_account = dict(acc) if acc else None
+    st.session_state.show_all_rows = False         # 回到“只看本人”
+    st.session_state.pop("show_all_toggle", None)  # 复选框回到默认（只看本人）
+    reset_record_views()                           # 清空上一个账号的结果与对话
+    if acc:
+        name = acc["姓名"]
+        if old and old.get("姓名") == name:
+            st.session_state.toast = ("success", f"当前已是 {name} 的账号。")
+        else:
+            suffix = f"，{tip}" if tip else ""
+            st.session_state.toast = (
+                "success",
+                f"已切换为 {name}（{acc['学号']}）{suffix}，志愿记录已同步切换为该账号的数据。",
+            )
+    else:
+        st.session_state.toast = (
+            "success",
+            "已退出个人账号，记录视图已切回全员；重新绑定后录入与查询会跟随账号。",
+        )
+
+
 def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
                          place: str = "", note: str = "") -> dict:
     """工具5：为当前绑定的个人账号录入一条新的志愿记录（只需活动名称与时长）"""
@@ -699,6 +784,11 @@ def add_volunteer_record(project_name: str, date: str = "", hours: float = 0.0,
 
     mine = st.session_state.volunteer_df[st.session_state.volunteer_df["姓名"] == acc["姓名"]]
     total = float(mine["时长(小时)"].sum())
+    # 数据变了，之前查到的结果与统计已过期，一并清掉，避免和新数据对不上
+    st.session_state.last_records = None
+    st.session_state.last_summary = None
+    st.session_state.last_owner = ""
+    st.session_state.excel_file = None
     extra = "；".join([x for x in [f"地点 {place.strip()}" if str(place).strip() else "",
                                    f"备注 {note.strip()}" if str(note).strip() else ""] if x])
     return {
@@ -726,13 +816,18 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_volunteer_data",
-            "description": "按起止日期查询校园志愿记录；可通过可选参数 project_name 按志愿项目名称关键字筛选。",
+            "description": "按起止日期查询校园志愿记录；可通过可选参数 project_name 按志愿项目名称关键字筛选，通过 scope 指定查本人还是全员。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "start_date": {"type": "string", "description": "起始日期，格式 YYYY-MM-DD"},
                     "end_date": {"type": "string", "description": "结束日期，格式 YYYY-MM-DD"},
                     "project_name": {"type": "string", "description": "可选。志愿项目名称关键字，不需要时省略"},
+                    "scope": {
+                        "type": "string",
+                        "enum": ["me", "all"],
+                        "description": "查询口径：me 只查当前登录账号本人的记录（默认）；all 查全部成员记录。用户说“每个人/全员/全班/所有同学”时传 all",
+                    },
                 },
                 "required": ["start_date", "end_date"],
             },
@@ -1027,6 +1122,7 @@ def run_agent(user_input: str, status=None):
                     # 查询/统计成功后，同步刷新页面的可视化
                     if name == "query_volunteer_data" and result.get("status") == "success":
                         st.session_state.last_records = result["records"]
+                        st.session_state.last_owner = result.get("owner", "")
                     if name == "calc_total_hours" and result.get("status") == "success":
                         st.session_state.last_summary = result["summary"]
                     if status is not None:
@@ -1444,13 +1540,25 @@ def render_header():
 
 
 def render_stats():
-    df = st.session_state.volunteer_df
-    cards = [
-        ("📋", "#EBF8FF", "#2B6CB0", "志愿记录总数", f"{len(df)}", "条"),
-        ("👥", "#F0FFF4", "#38A169", "参与志愿者", f"{df['姓名'].nunique()}", "人"),
-        ("⏳", "#FFFAF0", "#DD6B20", "累计志愿时长", f"{df['时长(小时)'].sum():.1f}", "小时"),
-        ("🎯", "#FAF5FF", "#805AD5", "覆盖志愿项目", f"{df['志愿项目'].nunique()}", "个"),
-    ]
+    """顶部 KPI：跟随当前记录口径——绑定账号后是“我的”，勾选全员或未绑定则是“全员”"""
+    df = view_df()
+    acc = get_bound_account()
+    n = len(df)
+    hrs = float(df["时长(小时)"].sum()) if n else 0.0
+    if acc and records_scope() == "me":
+        cards = [
+            ("📋", "#EBF8FF", "#2B6CB0", f"{acc['姓名']}的志愿记录", f"{n}", "条"),
+            ("⏳", "#FFFAF0", "#DD6B20", "我的累计时长", f"{hrs:.1f}", "小时"),
+            ("🎯", "#FAF5FF", "#805AD5", "我参与的项目", f"{df['志愿项目'].nunique() if n else 0}", "个"),
+            ("📈", "#F0FFF4", "#38A169", "单次平均时长", f"{(hrs / n) if n else 0:.1f}", "小时"),
+        ]
+    else:
+        cards = [
+            ("📋", "#EBF8FF", "#2B6CB0", "志愿记录总数", f"{n}", "条"),
+            ("👥", "#F0FFF4", "#38A169", "参与志愿者", f"{df['姓名'].nunique() if n else 0}", "人"),
+            ("⏳", "#FFFAF0", "#DD6B20", "累计志愿时长", f"{hrs:.1f}", "小时"),
+            ("🎯", "#FAF5FF", "#805AD5", "覆盖志愿项目", f"{df['志愿项目'].nunique() if n else 0}", "个"),
+        ]
     cols = st.columns(4)
     for col, (icon, bg, fg, label, value, unit) in zip(cols, cards):
         with col:
@@ -1466,6 +1574,11 @@ def render_stats():
                 """,
                 unsafe_allow_html=True,
             )
+    if acc and records_scope() == "all":
+        st.caption(
+            f"当前按「全员」口径展示（{acc['姓名']} 的账号仍处于绑定状态）；"
+            "关闭左侧「显示全部成员的记录」，或对助手说“只看我自己的记录”，即可切回本人数据。"
+        )
 
 
 def _panel_title(icon, dot_color, text, hint=""):
@@ -1582,12 +1695,14 @@ def _do_create_account():
     if any(a["学号"] == n_sid and a["姓名"] != n_name for a in DEMO_ACCOUNTS):
         st.session_state.toast = ("error", f"学号 {n_sid} 已被其他账号占用，请核对。")
         return
-    st.session_state.bound_account = {"姓名": n_name, "学号": n_sid, "学院": n_col, "专业": ""}
-    st.session_state.acct_picker = f"{n_name}（我的账号）"
+    st.session_state.pop("acct_picker", None)   # 让选择器按 index 重新定位到新账号
     st.session_state.new_acct_name = ""
     st.session_state.new_acct_sid = ""
     st.session_state.new_acct_col = ""
-    st.session_state.toast = ("success", f"已绑定个人账号：{n_name}（{n_sid}），之后录入只需填活动名称与时长。")
+    switch_account(
+        {"姓名": n_name, "学号": n_sid, "学院": n_col, "专业": ""},
+        tip="之后录入只需填活动名称与时长",
+    )
 
 
 def render_account_bind():
@@ -1617,15 +1732,10 @@ def render_account_bind():
         c1, c2 = st.columns(2)
         if c1.button("绑定 / 切换", use_container_width=True, key="acct_bind_btn"):
             demo = next((a for a in DEMO_ACCOUNTS if a["姓名"] == pick), None)
-            if demo:
-                st.session_state.bound_account = dict(demo)
-                st.session_state.toast = ("success", f"已登录：{demo['姓名']}（{demo['学号']}）")
-            else:
-                st.session_state.toast = ("success", f"当前已是 {acc['姓名']} 的账号。")
+            switch_account(demo or acc)
             st.rerun()
         if c2.button("退出登录", use_container_width=True, key="acct_logout_btn"):
-            st.session_state.bound_account = None
-            st.session_state.toast = ("success", "已退出个人账号，录入功能暂不可用。")
+            switch_account(None)
             st.rerun()
 
     acc = st.session_state.get("bound_account")
@@ -1647,6 +1757,8 @@ def render_account_bind():
         """,
         unsafe_allow_html=True,
     )
+    scope_txt = "仅本人" if records_scope() == "me" else "全员"
+    st.caption(f"记录口径：{scope_txt} · 切换账号后，数据表 / KPI / 查询结果会一起切换")
 
 
 def render_account_strip():
@@ -1978,18 +2090,16 @@ def render_sidebar():
 
         # ---- 数据表 ----
         acc = st.session_state.get("bound_account")
-        df_all = st.session_state.volunteer_df
         show_all = st.toggle(
             "显示全部成员的记录",
             value=st.session_state.show_all_rows,
             key="show_all_toggle",
         )
         st.session_state.show_all_rows = show_all
+        df_view = view_df()          # 切换账号后，这里自动变成新账号的记录
         if acc and not show_all:
-            df_view = df_all[df_all["姓名"] == acc["姓名"]]
             st.markdown(f"**📋 我的志愿记录**（{len(df_view)} 条）")
         else:
-            df_view = df_all
             st.markdown(f"**📋 全部志愿记录**（{len(df_view)} 条）")
         st.dataframe(df_view, use_container_width=True, height=210)
 
@@ -2030,6 +2140,7 @@ def render_sidebar():
             st.session_state.history = []
             st.session_state.last_records = None
             st.session_state.last_summary = None
+            st.session_state.last_owner = ""
             st.session_state.toast = ("success", "对话与结果已清空。")
             st.rerun()
         if c2.button("重置数据", use_container_width=True):
@@ -2038,6 +2149,7 @@ def render_sidebar():
             st.session_state.history = []
             st.session_state.last_summary = None
             st.session_state.last_records = None
+            st.session_state.last_owner = ""
             st.session_state.excel_file = None
             st.session_state.toast = ("success", "已重置为初始模拟数据。")
             st.rerun()
@@ -2095,7 +2207,9 @@ def render_results():
         if recs:
             df = pd.DataFrame(recs)
             total = pd.to_numeric(df["时长(小时)"], errors="coerce").fillna(0).sum()
-            st.caption(f"共 {len(df)} 条记录 · 合计 {total:.1f} 小时")
+            owner = st.session_state.get("last_owner") or ""
+            head = f"{owner} · " if owner else ""
+            st.caption(f"{head}共 {len(df)} 条记录 · 合计 {total:.1f} 小时")
             st.dataframe(df, use_container_width=True, height=210)
         else:
             st.caption("本次对话还没有查询结果，先问一次“查询某时间段的志愿记录”。")
@@ -2116,16 +2230,16 @@ def render_chat():
 
     # 快捷指令
     st.markdown(
-        '<span class="chip">🕘 查询10月志愿记录</span>'
-        '<span class="chip">📊 统计每人总时长</span>'
+        '<span class="chip">🕘 查询我10月的记录</span>'
+        '<span class="chip">📊 统计每个人的总时长</span>'
         '<span class="chip">📥 导出汇总Excel</span>',
         unsafe_allow_html=True,
     )
     c1, c2, c3 = st.columns(3)
-    if c1.button("🕘 查询10月记录", use_container_width=True):
-        st.session_state.pending_input = "帮我查询 2026-10-01 到 2026-10-31 的志愿记录"
+    if c1.button("🕘 查询我的记录", use_container_width=True):
+        st.session_state.pending_input = "帮我查询我 2026-10-01 到 2026-10-31 的志愿记录"
     if c2.button("📊 统计总时长", use_container_width=True):
-        st.session_state.pending_input = "统计 2026-09-01 到 2026-10-31 每个人的累计志愿总时长"
+        st.session_state.pending_input = "统计 2026-09-01 到 2026-10-31 每个人（全员）的累计志愿总时长"
     if c3.button("📥 导出Excel", use_container_width=True):
         st.session_state.pending_input = "把 2026-09-01 到 2026-10-31 的志愿时长汇总导出成 Excel"
 
@@ -2186,8 +2300,8 @@ def main():
         st.stop()
 
     render_header()
-    render_stats()
-    render_sidebar()
+    render_sidebar()          # 先渲染侧栏，账号/口径在本次运行就已确定
+    render_stats()            # KPI 与记录表跟随当前账号
     render_account_strip()
     render_school_strip()
 
