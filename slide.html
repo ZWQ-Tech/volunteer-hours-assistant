@@ -302,21 +302,62 @@
   }
   .logrow b { font-family: Consolas, monospace; color: var(--ink); font-size: .57rem; }
   .logrow em { font-style: normal; color: #0D9488; font-weight: 800; }
-  /* 放大版界面示意（第 07 页） */
+  /* 放大版界面示意（第 10 页） */
   .mock.big .bar .u { font-size: .66rem; padding: .2rem .7rem; }
-  .mock.big .ptitle { font-size: .68rem; margin-bottom: .45rem; }
-  .mock.big .bubble { font-size: .7rem; padding: .42rem .58rem; margin-bottom: .4rem; }
-  .mock.big .answer { font-size: .66rem; padding: .48rem .58rem; line-height: 1.65; }
-  .mock.big .logrow { font-size: .64rem; padding: .36rem .5rem; margin-bottom: .3rem; }
-  .mock.big .logrow b { font-size: .65rem; }
-  .mock.big .minibtn { font-size: .68rem; padding: .42rem; margin-top: .4rem; }
-  .mock.big .acctbar { padding: .4rem .6rem; }
-  .mock.big .acctbar .av { width: 1.1rem; height: 1.1rem; font-size: .58rem; }
-  .mock.big .acctbar .nm { font-size: .68rem; }
-  .mock.big .acctbar .nm em { font-size: .58rem; }
-  .mock.big .acctbar .kp { font-size: .62rem; }
-  .mock.big .body { gap: .6rem; padding: .65rem; }
-  .mock.big .panel { padding: .58rem .62rem; }
+  .mock.big .ptitle { font-size: .66rem; margin-bottom: .32rem; }
+  .mock.big .bubble { font-size: .66rem; padding: .36rem .5rem; margin-bottom: .28rem; }
+  .mock.big .answer { font-size: .62rem; padding: .42rem .5rem; line-height: 1.55; }
+  .mock.big .logrow { font-size: .6rem; padding: .3rem .45rem; margin-bottom: .24rem; }
+  .mock.big .logrow b { font-size: .62rem; }
+  .mock.big .minibtn { font-size: .62rem; padding: .33rem; margin-top: .3rem; }
+  .mock.big .acctbar { padding: .34rem .55rem; }
+  .mock.big .acctbar .av { width: 1.05rem; height: 1.05rem; font-size: .56rem; }
+  .mock.big .acctbar .nm { font-size: .66rem; }
+  .mock.big .acctbar .nm em { font-size: .56rem; }
+  .mock.big .acctbar .kp { font-size: .6rem; }
+  .mock.big .body { gap: .42rem; padding: .45rem; grid-template-columns: 1.12fr 1fr; }
+  .mock.big .panel { padding: .48rem .55rem; }
+  .mock.big .statrow { gap: .4rem; }
+  .mock.big .statcard { padding: .34rem .5rem; }
+  .mock.big .statcard .vv { font-size: .95rem; }
+  .mock.big .statcard .lb { font-size: .6rem; }
+  .mock.big .statcard .hint { font-size: .53rem; }
+  .mock.big .statcard .ic { width: 1.18rem; height: 1.18rem; font-size: .62rem; }
+  /* 顶部 KPI 卡（新版界面） */
+  .mock .statrow { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  .mock .statcard {
+    background: #fff; border: .05rem solid var(--line); border-radius: .35rem;
+    padding: .45rem .6rem; display: flex; align-items: center; gap: .45rem;
+  }
+  .mock .statcard.on { border-color: #BFD9F2; box-shadow: 0 .25rem .6rem rgba(43,108,176,.13); }
+  .mock .statcard .ic {
+    width: 1.2rem; height: 1.2rem; border-radius: .3rem; flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: .62rem; background: #EBF8FF;
+  }
+  .mock .statcard .tx { display: flex; flex-direction: column; gap: .06rem; text-align: left; }
+  .mock .statcard .lb { font-size: .56rem; color: var(--muted); }
+  .mock .statcard .hint { font-size: .5rem; color: #2B6CB0; font-weight: 700; }
+  .mock .statcard .vv {
+    margin-left: auto; font-family: Consolas, monospace; font-size: .95rem;
+    font-weight: 800; color: #1E3A5F;
+  }
+  .mock .statcard .vv i { font-style: normal; font-size: .5rem; color: #A0AEC0; font-weight: 400; }
+
+  /* 代码讲解页 */
+  .code.big { font-size: .74rem; line-height: 1.85; padding: .85rem 1rem; }
+  .code .ln { color: #4B6072; user-select: none; }
+  .codepane { display: flex; flex-direction: column; gap: .5rem; }
+  .codecap {
+    font-size: .62rem; letter-spacing: .1em; color: var(--muted); font-weight: 800;
+    text-transform: uppercase; text-align: left;
+  }
+  .ann { border: .05rem solid var(--line); border-left: .16rem solid var(--c); border-radius: .3rem; background: #fff; padding: .52rem .65rem; text-align: left; }
+  .ann .an { font-family: Consolas, monospace; font-size: .62rem; font-weight: 800; color: var(--c); margin-right: .3rem; }
+  .ann .at { font-size: .78rem; font-weight: 800; color: var(--ink); }
+  .ann .ad { font-size: .73rem; color: var(--body); line-height: 1.55; margin-top: .12rem; }
+  .ann .ad code { font-size: .66rem; }
+  .side { display: flex; flex-direction: column; gap: .42rem; justify-content: space-between; }
+  .side .ann { flex: none; }
 
   .minibtn {
     text-align: center; font-size: .58rem; color: #fff; font-weight: 800;
@@ -345,6 +386,7 @@
   th { font-size: .66rem; letter-spacing: .08em; color: var(--muted); font-weight: 800; text-transform: uppercase; }
   td code { font-size: .72rem; }
   .num { font-family: Consolas, monospace; text-align: right; }
+  .tbl-tight th, .tbl-tight td { padding: .26rem .5rem; font-size: .73rem; }
 
   /* ============ 其他 ============ */
   .note {
@@ -436,26 +478,53 @@
         <div class="kpi"><div class="v" data-count="39.0">0<i>h</i></div><div class="k">累计时长</div></div>
       </div>
 
-      <div class="cards2 rv" style="--d:.2s; margin-top:1.15rem">
-        <div class="card top" style="--c:#E11D48">
-          <div class="badge" style="--c:#E11D48">手工流程</div>
-          <div class="ct">5 步操作，容易出错</div>
-          <div class="cd">
-            ① 收集各班表 → ② 统一字段 → ③ 按日期筛 → ④ 逐人累加 → ⑤ 重做汇总表<br>
+      <div class="cards3 rv" style="--d:.2s; margin-top:1.55rem">
+        <div class="card top" style="--c:#E11D48; padding:1rem 1.1rem">
+          <div class="badge" style="--c:#E11D48">痛点一 · 手工流程</div>
+          <div class="ct" style="font-size:.92rem">5 步操作，容易出错</div>
+          <div class="cd" style="font-size:.82rem">
+            ① 收表 → ② 统一字段 → ③ 按日期筛 → ④ 逐人累加 → ⑤ 重做汇总<br>
             任一步改数据，后面全部重来
           </div>
         </div>
-        <div class="card top" style="--c:#0D9488">
-          <div class="badge" style="--c:#0D9488">本项目的目标</div>
-          <div class="ct">1 句话，结果可核对</div>
-          <div class="cd">
-            说清时间范围与要什么，剩下的交给工具执行；<br>
+        <div class="card top" style="--c:#D97706; padding:1rem 1.1rem">
+          <div class="badge" style="--c:#D97706">痛点二 · 活动分散</div>
+          <div class="ct" style="font-size:.92rem">消息过期，找不到合适的活动</div>
+          <div class="cd" style="font-size:.82rem">
+            活动散落在班群、公众号、海报里，报名链接与截止时间各不相同<br>
+            想凑满时长，得先自己筛一遍信息
+          </div>
+        </div>
+        <div class="card top" style="--c:#0D9488; padding:1rem 1.1rem">
+          <div class="badge" style="--c:#0D9488">本项目目标</div>
+          <div class="ct" style="font-size:.92rem">1 句话，结果可核对</div>
+          <div class="cd" style="font-size:.82rem">
+            说清时间范围与要什么，剩下的交给工具执行<br>
             每个数字都能回溯到原始记录，报表可直接归档
           </div>
         </div>
       </div>
+
+      <div class="cards3 rv" style="--d:.32s; margin-top:1.15rem">
+        <div class="card top slim" style="--c:#2563EB">
+          <div class="ct">规则明确 → 能工具化</div>
+          <div class="cd">筛选、分组、求和都是确定性操作，适合写成函数</div>
+        </div>
+        <div class="card top slim" style="--c:#7C3AED">
+          <div class="ct">结果可验 → 不怕幻觉</div>
+          <div class="cd">每个数字都能回到原始记录，模型算错一眼可见</div>
+        </div>
+        <div class="card top slim" style="--c:#DB2777">
+          <div class="ct">入口自然 → 适合对话</div>
+          <div class="cd">学生只会说“帮我统计一下”，不会写公式或 SQL</div>
+        </div>
+      </div>
+
+      <div class="note rv" style="--d:.4s; margin-top:1rem; font-size:.78rem">
+        <b>规模说明：</b>真实院系一学期的记录量级通常是数百条；本 demo 用 10 条记录 / 4 名志愿者压缩演示，保证一次答辩能跑完全部链路。
+      </div>
     </div>
-    <div class="pageno"><span class="pn">02</span> / 12</div>
+    <div class="pageno"><span class="pn">02</span> / 15</div>
   </section>
 
   <!-- ================= 03 方案 ================= -->
@@ -516,7 +585,7 @@
         <b>范围界定：</b>面向在校学生与院系志愿负责人，单机运行，三条链路的业务数据均为课程自建模拟数据
       </div>
     </div>
-    <div class="pageno"><span class="pn">03</span> / 12</div>
+    <div class="pageno"><span class="pn">03</span> / 15</div>
   </section>
 
   <!-- ================= 04 架构 ================= -->
@@ -559,13 +628,245 @@
         </div>
       </div>
     </div>
-    <div class="pageno"><span class="pn">04</span> / 12</div>
+
+    <div class="wrap" style="margin-top:.95rem">
+      <div class="cards2" style="grid-template-columns:1.3fr 1fr; align-items:stretch; gap:1.1rem">
+        <div class="card rv" style="--d:.6s; padding:.5rem .9rem">
+          <div class="codecap" style="margin-bottom:.35rem">各层在 app.py 中的落点</div>
+          <table>
+            <tr><th style="width:4.6rem">层</th><th>关键函数</th></tr>
+            <tr><td><b>A 交互层</b></td><td><code>main()</code> · <code>render_chat()</code> · <code>render_stats()</code></td></tr>
+            <tr><td><b>B 会话层</b></td><td><code>run_agent()</code> · 拼装 messages 与 TOOLS_SCHEMA</td></tr>
+            <tr><td><b>C 模型层</b></td><td><code>create_completion_with_retry()</code></td></tr>
+            <tr><td><b>D 工具层</b></td><td><code>execute_tool()</code> + 5 个业务函数</td></tr>
+            <tr><td><b>E 数据层</b></td><td><code>init_state()</code> · <code>st.session_state.volunteer_df</code></td></tr>
+          </table>
+        </div>
+        <div class="side rv" style="--d:.66s">
+          <div class="card top slim" style="--c:#2563EB">
+            <div class="ct">模型只读参数，不碰数据</div>
+            <div class="cd">数字全部由 pandas 在本地算出，避免模型口算与编造</div>
+          </div>
+          <div class="card top slim" style="--c:#D97706">
+            <div class="ct">会话内存即数据库</div>
+            <div class="cd"><code>volunteer_df</code> 是查询、统计、导出的同一份事实来源</div>
+          </div>
+          <div class="card top slim" style="--c:#0D9488">
+            <div class="ct">每步可见、失败可重试</div>
+            <div class="cd">工具调用写日志、限流自动退避、失败一键重发原问题</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pageno"><span class="pn">04</span> / 15</div>
+  </section>
+
+  <!-- ================= 05 代码讲解① 会话循环 ================= -->
+  <section class="slide" style="--ac:#2563EB">
+    <div class="hd">
+      <div class="kicker">04 · 代码讲解 ①</div>
+      <h2>核心循环：<em>模型只决定调谁，代码负责真干</em></h2>
+      <div class="dek">run_agent() 一次请求最多 6 轮：模型给工具名与参数，本地执行后把结果回填，再让模型继续判断</div>
+    </div>
+
+    <div class="wrap">
+      <div class="cards2 rv" style="--d:.05s; align-items:stretch; grid-template-columns:1.25fr 1fr">
+        <div class="codepane">
+          <div class="codecap">app.py · run_agent() · 节选</div>
+          <div class="code big"><span class="k">for</span> _ <span class="k">in</span> <span class="t">range</span>(<span class="s">6</span>):            <span class="c"># ① 轮次上限，防失控</span>
+    resp = client.chat.completions.create(
+        model=MODEL_NAME, messages=messages,
+        tools=TOOLS_SCHEMA, temperature=<span class="s">0.3</span>)
+    msg = resp.choices[<span class="s">0</span>].message
+
+    <span class="k">if</span> msg.tool_calls:                 <span class="c"># ② 模型决定调哪个工具</span>
+        messages.append({<span class="s">"role"</span>: <span class="s">"assistant"</span>,
+            <span class="s">"tool_calls"</span>: normalized_calls})
+        <span class="k">for</span> name, args, call_id <span class="k">in</span> parsed_calls:
+            result = execute_tool(name, args)   <span class="c"># ③ 本地真实执行</span>
+            messages.append({<span class="s">"role"</span>: <span class="s">"tool"</span>,   <span class="c"># ④ 结果回填</span>
+                <span class="s">"tool_call_id"</span>: call_id,
+                <span class="s">"content"</span>: json.dumps(result, ensure_ascii=<span class="k">False</span>)})
+        <span class="k">continue</span>                       <span class="c"># ⑤ 带着结果再问模型</span>
+
+    history.append((<span class="s">"assistant"</span>, msg.content))  <span class="c"># ⑥ 自然语言收尾</span>
+    <span class="k">return</span></div>
+        </div>
+        <div class="side">
+          <div class="ann rv" style="--c:#2563EB; --d:.10s">
+            <span class="an">①</span><span class="at">轮次上限 6</span>
+            <div class="ad">防止模型反复调工具停不下来；超限给出明确提示并可重试</div>
+          </div>
+          <div class="ann rv" style="--c:#7C3AED; --d:.16s; ">
+            <span class="an">②</span><span class="at">决策权在模型</span>
+            <div class="ad">代码里没有 <code>if "统计" in text</code> 这类关键词分支，调不调、调几次由 tool_calls 决定</div>
+          </div>
+          <div class="ann rv" style="--c:#D97706; --d:.22s; ">
+            <span class="an">③</span><span class="at">执行权在代码</span>
+            <div class="ad">execute_tool 是本地真实函数：pandas 筛选、openpyxl 写文件，结果可复现</div>
+          </div>
+          <div class="ann rv" style="--c:#0D9488; --d:.28s; ">
+            <span class="an">④</span><span class="at">回填形成闭环</span>
+            <div class="ad">role=tool 的消息带 <code>tool_call_id</code>，模型下一轮才能"看到"真实结果</div>
+          </div>
+          <div class="note rv" style="--d:.34s; font-size:.76rem">
+            参数不合法（JSON 截断）时先规范化再回填，避免下一轮请求 400
+          </div>
+        </div>
+      </div>
+
+      <div class="cards3 rv" style="--d:.36s; margin-top:.95rem">
+        <div class="card top slim" style="--c:#2563EB">
+          <div class="ct">6 轮 · 调用上限</div>
+          <div class="cd">单次请求最多循环 6 次，防模型原地打转</div>
+        </div>
+        <div class="card top slim" style="--c:#0D9488">
+          <div class="ct">3 次 · 典型调用数</div>
+          <div class="cd">“查询 → 统计 → 导出”链路各调一次工具</div>
+        </div>
+        <div class="card top slim" style="--c:#D97706">
+          <div class="ct">0 处 · 关键词分支</div>
+          <div class="cd">代码不判断“统计/导出”等字样，决策权完全交给模型</div>
+        </div>
+      </div>
+    </div>
+    <div class="pageno"><span class="pn">05</span> / 15</div>
+  </section>
+
+  <!-- ================= 06 代码讲解② 工具协议与校验 ================= -->
+  <section class="slide" style="--ac:#D97706">
+    <div class="hd">
+      <div class="kicker">05 · 代码讲解 ②</div>
+      <h2>工具怎么写：<em>一份 JSON Schema + 一道校验关</em></h2>
+      <div class="dek">Schema 决定模型"能不能填对"，校验决定"填错了会不会炸"——两侧都要设计</div>
+    </div>
+
+    <div class="wrap">
+      <div class="cards2 rv" style="--d:.05s; align-items:stretch; grid-template-columns:1.2fr 1fr">
+        <div class="codepane">
+          <div class="codecap">TOOLS_SCHEMA · add_volunteer_record</div>
+          <div class="code big">{<span class="s">"type"</span>: <span class="s">"function"</span>, <span class="s">"function"</span>: {
+  <span class="s">"name"</span>: <span class="s">"add_volunteer_record"</span>,
+  <span class="s">"description"</span>: <span class="s">"为当前绑定账号登记一条志愿记录"</span>,
+  <span class="s">"parameters"</span>: {
+    <span class="s">"type"</span>: <span class="s">"object"</span>,
+    <span class="s">"properties"</span>: {
+      <span class="s">"project_name"</span>: {<span class="s">"type"</span>: <span class="s">"string"</span>},
+      <span class="s">"hours"</span>: {<span class="s">"type"</span>: <span class="s">"number"</span>},
+      <span class="s">"date"</span>: {<span class="s">"type"</span>: <span class="s">"string"</span>,   <span class="c"># YYYY-MM-DD</span>
+               <span class="s">"description"</span>: <span class="s">"缺省=今天"</span>}
+    },
+    <span class="s">"required"</span>: [<span class="s">"project_name"</span>, <span class="s">"hours"</span>]
+  }}}</div>
+          <div class="codecap" style="margin-top:.45rem">add_volunteer_record() · 校验</div>
+          <div class="code" style="font-size:.68rem"><span class="k">if</span> d &gt; date.today():  <span class="k">return</span> {<span class="s">"status"</span>: <span class="s">"error"</span>, ...}
+<span class="k">if</span> <span class="k">not</span> <span class="s">0</span> &lt; h &lt;= <span class="s">24</span>:    <span class="k">return</span> {<span class="s">"status"</span>: <span class="s">"error"</span>, ...}
+<span class="k">if</span> dup.shape[<span class="s">0</span>]:         <span class="k">return</span> {<span class="s">"status"</span>: <span class="s">"error"</span>, ...}</div>
+        </div>
+        <div class="side">
+          <div class="ann rv" style="--c:#D97706; --d:.10s">
+            <span class="an">①</span><span class="at">必填只留两个</span>
+            <div class="ad">活动名 + 时长是用户一定会说的；日期、地点可不给</div>
+          </div>
+          <div class="ann rv" style="--c:#7C3AED; --d:.16s; ">
+            <span class="an">②</span><span class="at">身份不进参数</span>
+            <div class="ad">姓名学号取自绑定账号 <code>bound_account</code>，模型无权填写，杜绝张冠李戴</div>
+          </div>
+          <div class="ann rv" style="--c:#E11D48; --d:.22s; ">
+            <span class="an">③</span><span class="at">三类硬校验</span>
+            <div class="ad">日期格式与未来日期、时长区间 0&lt;h≤24（统一到 0.5 刻度）、同人同日重复记录</div>
+          </div>
+          <div class="ann rv" style="--c:#0D9488; --d:.28s; ">
+            <span class="an">④</span><span class="at">错误说人话</span>
+            <div class="ad">返回 <code>status=error</code> + 具体原因，模型据此向用户解释并请求修正，页面不崩溃</div>
+          </div>
+          <div class="note rv" style="--d:.34s; font-size:.74rem">
+            <b>返回结构：</b><code>{status, record, personal_total}</code><br>
+            模型拿 <code>personal_total</code> 直接回答“本人累计 16.0 小时”，不必自己加总
+          </div>
+        </div>
+      </div>
+
+      <div class="note rv" style="--d:.36s; margin-top:.9rem">
+        <b>参数设计的检验标准：</b>模型第一次就能填对（描述清楚、必填最少）；填错时程序能拦住并说清原因（校验有边界、错误可读）。
+      </div>
+    </div>
+    <div class="pageno"><span class="pn">06</span> / 15</div>
+  </section>
+
+  <!-- ================= 07 代码讲解③ 状态同步 ================= -->
+  <section class="slide" style="--ac:#7C3AED">
+    <div class="hd">
+      <div class="kicker">06 · 代码讲解 ③</div>
+      <h2>换账号时，<em>卡片、明细、对话一起换</em></h2>
+      <div class="dek">switch_account() 是唯一切换入口：先换身份，再清缓存；顶部卡片始终是"本人数据的实时派生"</div>
+    </div>
+
+    <div class="wrap">
+      <div class="cards2 rv" style="--d:.05s; align-items:stretch; grid-template-columns:1.2fr 1fr">
+        <div class="codepane">
+          <div class="codecap">app.py · switch_account() / render_stats()</div>
+          <div class="code big"><span class="k">def</span> <span class="t">switch_account</span>(acc):
+    bound_account = <span class="t">dict</span>(acc) <span class="k">if</span> acc <span class="k">else</span> <span class="k">None</span>
+    show_all_rows = <span class="k">False</span>        <span class="c"># 回到只看本人</span>
+    <span class="t">reset_record_views</span>()         <span class="c"># 清空查询/统计/导出/对话</span>
+
+<span class="k">def</span> <span class="t">render_stats</span>():          <span class="c"># 两张卡 = 本人数据</span>
+    mine = <span class="t">my_records_df</span>()     <span class="c"># df[df.姓名 == 绑定账号]</span>
+    n, hrs = <span class="t">len</span>(mine), mine[<span class="s">"时长(小时)"</span>].<span class="t">sum</span>()
+    <span class="k">if</span> <span class="t">clicked</span>():              <span class="c"># 点卡片 → 展开明细</span>
+        show_my_records = <span class="k">True</span>
+        <span class="t">st.rerun</span>()</div>
+          <div class="note rv" style="--d:.3s; margin-top:.5rem; font-size:.76rem">
+            明细面板 data 直接来自 <code>my_records_df()</code>：录入一条新记录，卡片数字、明细表、账号条在同一轮渲染里一起变
+          </div>
+        </div>
+        <div class="side">
+          <div class="ann rv" style="--c:#7C3AED; --d:.10s">
+            <span class="an">①</span><span class="at">唯一入口</span>
+            <div class="ad">绑定、切换、退出都走这一个函数，避免多处各写 session_state 导致不同步</div>
+          </div>
+          <div class="ann rv" style="--c:#2563EB; --d:.16s; ">
+            <span class="an">②</span><span class="at">缓存一起清</span>
+            <div class="ad"><code>last_records / last_summary / excel_file / history</code> 全清，防止拿上一账号的结果回答</div>
+          </div>
+          <div class="ann rv" style="--c:#0D9488; --d:.22s; ">
+            <span class="an">③</span><span class="at">卡片是派生值</span>
+            <div class="ad">不额外存一份统计，直接由 df 过滤求和——所以永远是实时的，不会与记录打架</div>
+          </div>
+          <div class="ann rv" style="--c:#D97706; --d:.28s; ">
+            <span class="an">④</span><span class="at">点开即下钻</span>
+            <div class="ad">点「志愿记录总数」整卡展开逐条明细（日期/项目/时长/地点/备注），再点一次收起</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards3 rv" style="--d:.34s; margin-top:.85rem; align-items:stretch">
+        <div class="card top slim" style="--c:#2563EB">
+          <div class="ct">切换前 · 张三</div>
+          <div class="cd">卡片 <b>3 条 / 12.5h</b>　明细 3 行　对话 3 轮</div>
+        </div>
+        <div class="card top slim" style="--c:#0D9488">
+          <div class="ct">切换后 · 李四</div>
+          <div class="cd">卡片 <b>2 条 / 8.5h</b>　明细 2 行　对话已清空</div>
+        </div>
+        <div class="card top slim" style="--c:#D97706">
+          <div class="ct">再录一条 · 张三</div>
+          <div class="cd">卡片立刻变 <b>4 条 / 16.0h</b>，明细同步多一行</div>
+        </div>
+      </div>
+
+      <div class="note rv" style="--d:.4s; margin-top:.9rem">
+        <b>为什么强调「唯一入口」：</b>Streamlit 每次交互都会重跑整个脚本，<code>st.session_state</code> 是唯一的事实来源；若在多个按钮里各写一份绑定逻辑，卡片、明细、对话就会出现“换了一半”的不一致。
+      </div>
+    </div>
+    <div class="pageno"><span class="pn">07</span> / 15</div>
   </section>
 
   <!-- ================= 05 时序 ================= -->
   <section class="slide" style="--ac:#D97706">
     <div class="hd">
-      <div class="kicker">04 · 运行机制</div>
+      <div class="kicker">07 · 运行机制</div>
       <h2>一句话触发<em>三次工具调用</em></h2>
       <div class="dek">从用户输入到生成结论，共 9 个环节；页面在每一步写入日志，可逐条核对</div>
     </div>
@@ -584,17 +885,48 @@
         <div class="step rv" style="--d:.36s"><div class="n">↺</div><div class="tx">限流或超时时<b>自动退避重试</b>，失败可一键重发</div></div>
       </div>
 
-      <div class="note rv" style="--d:.48s; margin-top:1rem">
-        全流程约 3 次模型请求。若问的是活动（如"浦东新区有什么科普活动"），则走单轮分支：直接调用 <b>query_open_activities</b> 并按距离返回。
+      <div class="note rv" style="--d:.48s; margin-top:.8rem">
+        全流程约 3 次模型请求。若问的是活动（如“浦东新区有什么科普活动”），则走单轮分支：直接调用 <b>query_open_activities</b> 并按距离返回。
+      </div>
+
+      <div class="cards2 rv" style="--d:.55s; margin-top:.85rem; align-items:stretch; grid-template-columns:1.25fr 1fr">
+        <div class="codepane">
+          <div class="codecap">messages 数组在这 3 次请求中如何增长（示意）</div>
+          <div class="code" style="font-size:.68rem"><span class="k">messages</span> = [
+  {<span class="s">"role"</span>: <span class="s">"system"</span>,    <span class="c"># 规则 + 今天日期 + 当前账号</span>
+  {<span class="s">"role"</span>: <span class="s">"user"</span>,      <span class="c"># 统计 9 月以来总时长并导出</span>
+  {<span class="s">"role"</span>: <span class="s">"assistant"</span>, <span class="c"># tool_calls: query_volunteer_data</span>
+  {<span class="s">"role"</span>: <span class="s">"tool"</span>,      <span class="c"># {status, count: 10, records: [...]}</span>
+  {<span class="s">"role"</span>: <span class="s">"assistant"</span>, <span class="c"># tool_calls: calc_total_hours</span>
+  {<span class="s">"role"</span>: <span class="s">"tool"</span>,      <span class="c"># {summary: [4 人], total: 39.0}</span>
+  {<span class="s">"role"</span>: <span class="s">"assistant"</span>, <span class="c"># tool_calls: export_volunteer_excel</span>
+  {<span class="s">"role"</span>: <span class="s">"tool"</span>,      <span class="c"># {filename: 志愿时长汇总_2158.xlsx}</span>
+  {<span class="s">"role"</span>: <span class="s">"assistant"</span>, <span class="c"># 最终中文结论（无 tool_calls）</span>
+]</div>
+        </div>
+        <div class="side">
+          <div class="card top slim" style="--c:#2563EB">
+            <div class="ct">链路一 · 统计导出　<span style="color:#2563EB">3 次调用</span></div>
+            <div class="cd">查询 → 统计 → 导出，每步都依赖上一步的真实结果</div>
+          </div>
+          <div class="card top slim" style="--c:#7C3AED">
+            <div class="ct">链路二 · 活动查询　<span style="color:#7C3AED">1 次调用</span></div>
+            <div class="cd">直接 <code>query_open_activities</code>，按距离排序后成文</div>
+          </div>
+          <div class="card top slim" style="--c:#DB2777">
+            <div class="ct">链路三 · 记录登记　<span style="color:#DB2777">1 次调用</span></div>
+            <div class="cd">写入后返回本人累计，需要时再串一次统计或导出</div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="pageno"><span class="pn">05</span> / 12</div>
+    <div class="pageno"><span class="pn">08</span> / 15</div>
   </section>
 
   <!-- ================= 06 工具设计 ================= -->
   <section class="slide" style="--ac:#2563EB">
     <div class="hd">
-      <div class="kicker">05 · 工具设计</div>
+      <div class="kicker">08 · 工具设计</div>
       <h2>五个工具的<em>入参、返回与取舍</em></h2>
       <div class="dek">工具均为项目内自行实现，参数结构直接决定模型能否稳定调用</div>
     </div>
@@ -686,15 +1018,15 @@
         </div>
       </div>
     </div>
-    <div class="pageno"><span class="pn">06</span> / 12</div>
+    <div class="pageno"><span class="pn">09</span> / 15</div>
   </section>
 
   <!-- ================= 07 界面示意 ================= -->
   <section class="slide" style="--ac:#7C3AED">
     <div class="hd">
-      <div class="kicker">06 · 功能演示</div>
+      <div class="kicker">09 · 界面与功能</div>
       <h2>界面四块：<em>账号 · 对话 · 日志 · 活动中心</em></h2>
-      <div class="dek">顶部账号条显示本人累计与全员记录；上两栏为对话与工具日志，底部活动中心分「校内」「校外」两页签</div>
+      <div class="dek">顶部两张卡片只显示本人数据（点「志愿记录总数」展开逐条明细）；上两栏为对话与工具日志，底部活动中心分「校内」「校外」两页签</div>
     </div>
 
     <div class="wrap">
@@ -708,6 +1040,18 @@
             <span class="av">张</span>
             <span class="nm">张三<em>学号 2023001</em></span>
             <span class="kp">我的记录 <b>3</b> 条 · 累计 <b>12.5</b> 小时　|　全员记录 <b>10</b> 条</span>
+          </div>
+          <div class="statrow">
+            <div class="statcard on">
+              <span class="ic">📋</span>
+              <span class="tx"><span class="lb">张三的志愿记录</span><span class="hint">👁 点击本卡片，查看每一项记录</span></span>
+              <span class="vv">3 <i>条</i></span>
+            </div>
+            <div class="statcard">
+              <span class="ic" style="background:#FFFAF0">⏳</span>
+              <span class="tx"><span class="lb">我的累计志愿时长</span><span class="hint" style="color:#DD6B20">共 3 条记录累计 · 随录入实时更新</span></span>
+              <span class="vv">12.5 <i>小时</i></span>
+            </div>
           </div>
           <div class="panel">
             <div class="ptitle">智能对话</div>
@@ -771,13 +1115,13 @@
         </div>
       </div>
     </div>
-    <div class="pageno"><span class="pn">07</span> / 12</div>
+    <div class="pageno"><span class="pn">10</span> / 15</div>
   </section>
 
   <!-- ================= 08 结果可视化 ================= -->
   <section class="slide" style="--ac:#0D9488">
     <div class="hd">
-      <div class="kicker">07 · 结果</div>
+      <div class="kicker">10 · 结果</div>
       <h2>统计结果<em>自动成图</em>，一眼看出差距</h2>
       <div class="dek">统计成功后页面自动绘制柱状图，并与明细表、导出文件保持一致</div>
     </div>
@@ -816,14 +1160,39 @@
           </div>
         </div>
       </div>
+
+      <div class="cards2 rv" style="--d:.32s; margin-top:1.05rem; align-items:stretch; grid-template-columns:1.15fr 1fr">
+        <div class="codepane">
+          <div class="codecap">render_chart() · 统计成功后自动出图</div>
+          <div class="code" style="font-size:.68rem">df = pd.<span class="t">DataFrame</span>(st.session_state.last_summary)
+fig = px.<span class="t">bar</span>(df, x=<span class="s">"姓名"</span>, y=<span class="s">"总时长(小时)"</span>,
+             color=<span class="s">"姓名"</span>, text=<span class="s">"总时长(小时)"</span>)
+fig.update_traces(texttemplate=<span class="s">"%{y}"</span>, textposition=<span class="s">"outside"</span>)
+st.plotly_chart(fig, use_container_width=<span class="k">True</span>)</div>
+        </div>
+        <div class="side">
+          <div class="card top slim" style="--c:#0D9488">
+            <div class="ct">同源：图表 = 表格 = Excel</div>
+            <div class="cd">三者都来自 <code>last_summary</code>，不会出现“图对表不对”</div>
+          </div>
+          <div class="card top slim" style="--c:#D97706">
+            <div class="ct">空结果不画图</div>
+            <div class="cd">查询无数据时只给友好提示，页面不会出现空图或报错</div>
+          </div>
+          <div class="card top slim" style="--c:#2563EB">
+            <div class="ct">颜色与人一一对应</div>
+            <div class="cd">固定色板保证同一个人每次颜色一致，便于跨图对照</div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="pageno"><span class="pn">08</span> / 12</div>
+    <div class="pageno"><span class="pn">11</span> / 15</div>
   </section>
 
   <!-- ================= 09 技术栈 ================= -->
   <section class="slide" style="--ac:#E11D48">
     <div class="hd">
-      <div class="kicker">08 · 所用工具</div>
+      <div class="kicker">11 · 所用工具</div>
       <h2>技术栈：<em>9 个组件</em>各司其职</h2>
       <div class="dek">从运行环境到测试与交付，依赖清单在 requirements.txt 中可完整复现</div>
     </div>
@@ -856,13 +1225,13 @@ streamlit run app.py</div>
         </div>
       </div>
     </div>
-    <div class="pageno"><span class="pn">09</span> / 12</div>
+    <div class="pageno"><span class="pn">12</span> / 15</div>
   </section>
 
   <!-- ================= 10 与课堂实验 ================= -->
   <section class="slide" style="--ac:#2563EB">
     <div class="hd">
-      <div class="kicker">09 · 与课堂实验的关系</div>
+      <div class="kicker">12 · 与课堂实验的关系</div>
       <h2>沿用的是<em>接入方式</em>，业务代码全部重写</h2>
       <div class="dek">demo_1 提供了界面骨架，demo_2 提供了接口与工具调用骨架</div>
     </div>
@@ -890,20 +1259,34 @@ streamlit run app.py</div>
             <li><b>五个业务工具</b>：入参、返回结构、异常分支均自行设计（含活动查询与记录录入）</li>
             <li><b>业务数据层</b>：模拟表、条件筛选、按姓名分组、Excel 生成</li>
             <li><b>身份与绑定</b>：个人账号自动带入姓名学号，绑定学校驱动活动推送</li>
+            <li><b>顶部数据卡</b>：两张卡只显示本人数据，点「志愿记录总数」可下钻逐条明细</li>
             <li><b>稳定性处理</b>：限流退避重试、备用模型、参数格式拦截</li>
             <li><b>界面与可观测</b>：双栏布局、日志分区、结果表格、运行日志</li>
             <li><b>测试与交付</b>：AppTest 验证、依赖清单、环境模板、仓库提交</li>
           </ul>
         </div>
       </div>
+
+      <div class="card rv" style="--d:.36s; margin-top:.85rem; padding:.45rem .95rem">
+        <div class="codecap" style="margin-bottom:.25rem">考核要求 → 本项目落点（逐条对齐）</div>
+        <table class="tbl-tight">
+          <tr><th style="width:46%">考核要求</th><th>本项目落点</th></tr>
+          <tr><td><b>真实 Tool Calling</b>，不是 if 关键词判断</td><td><code>run_agent()</code> 循环 + <code>tool_calls</code> 分派，代码中无关键词分支</td></tr>
+          <tr><td><b>自主新增业务工具</b></td><td>5 个工具（查询 / 统计 / 导出 / 活动 / 录入），入参与返回自行设计</td></tr>
+          <tr><td><b>参数设计说明</b></td><td>必填最少 + 三值状态 + 身份不进参数（见第 08 页）</td></tr>
+          <tr><td><b>异常容错与边界</b></td><td>日期格式 / 未来日期 / 时长区间 / 重复记录校验，空结果友好提示</td></tr>
+          <tr><td><b>加分项</b>：日志分区、网页下载、表单、柱状图</td><td>全部实现：工具日志独立分区、下载按钮、登记表单、统计后自动出图</td></tr>
+          <tr><td><b>文档与交付</b></td><td>README（含增量对比与参数表）+ 环境模板 + AppTest + 本幻灯片</td></tr>
+        </table>
+      </div>
     </div>
-    <div class="pageno"><span class="pn">10</span> / 12</div>
+    <div class="pageno"><span class="pn">13</span> / 15</div>
   </section>
 
   <!-- ================= 11 合规 ================= -->
   <section class="slide" style="--ac:#D97706">
     <div class="hd">
-      <div class="kicker">10 · 合规说明</div>
+      <div class="kicker">13 · 合规说明</div>
       <h2>数据来源、隐私与<em>使用边界</em></h2>
       <div class="dek">演示效果让位于合规：不使用真实学生信息，不在交付物中出现密钥</div>
     </div>
@@ -935,24 +1318,25 @@ streamlit run app.py</div>
         统计结果最终以学校志愿管理系统的原始记录为准；本工具用于减轻重复劳动，不替代认定流程。
       </div>
     </div>
-    <div class="pageno"><span class="pn">11</span> / 12</div>
+    <div class="pageno"><span class="pn">14</span> / 15</div>
   </section>
 
   <!-- ================= 12 不足与结尾 ================= -->
   <section class="slide" style="--ac:#7C3AED">
     <div class="hd">
-      <div class="kicker">11 · 反思与计划</div>
+      <div class="kicker">14 · 反思与计划</div>
       <h2>已知不足与<em>下一步</em></h2>
       <div class="dek">优先解决数据持久化与权限，再扩展分析能力</div>
     </div>
 
     <div class="wrap">
-      <div class="cards2" style="align-items:start">
+      <div class="cards2" style="align-items:stretch">
         <div class="card top rv" style="--c:#E11D48; --d:.02s">
           <div class="badge" style="--c:#E11D48">当前不足</div>
           <div class="cd">
             数据存于内存，重启即恢复样例<br>
             单用户运行，无登录与多用户隔离<br>
+            明细面板只读，暂不支持页面内改/删<br>
             筛选维度有限，仅日期与项目名<br>
             活动为本地模拟数据，非校方实时接口<br>
             校外距离为直线估算，未接路网导航<br>
@@ -965,7 +1349,8 @@ streamlit run app.py</div>
           <div class="cd">
             接入 SQLite，按学期归档数据<br>
             登录鉴权 + 提交、审核、归档三步流程<br>
-            扩展工具：个人明细、月度趋势、未达标提醒<br>
+            记录支持在线修改、撤销与操作留痕<br>
+            扩展工具：月度趋势、未达标提醒、按项目分类<br>
             对接校团委活动源与地图路线 API<br>
             容器化部署，支持多人同时访问
           </div>
@@ -974,23 +1359,29 @@ streamlit run app.py</div>
 
       <div class="rv" style="--d:.2s; margin-top:1.1rem; width:100%">
         <div style="text-align:center; font-size:.78rem; letter-spacing:.16em; font-weight:800; color:var(--ac); margin-bottom:.6rem">现场演示动线</div>
-        <div style="display:grid; grid-template-columns:1fr 2.2rem 1fr 2.2rem 1fr 2.2rem 1fr; gap:.4rem; align-items:center; width:100%">
-          <div class="card top" style="--c:#7C3AED; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">① 绑定学校</div><div class="cd" style="font-size:.72rem">左侧栏选校，顶部出现状态条</div></div>
-          <div style="text-align:center; color:var(--muted)">→</div>
-          <div class="card top" style="--c:#0D9488; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">② 看活动中心</div><div class="cd" style="font-size:.72rem">校内刷新、全市按区筛选</div></div>
-          <div style="text-align:center; color:var(--muted)">→</div>
-          <div class="card top" style="--c:#2563EB; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">③ 一句统计</div><div class="cd" style="font-size:.72rem">对话触发三次链式调用</div></div>
-          <div style="text-align:center; color:var(--muted)">→</div>
-          <div class="card top" style="--c:#D97706; padding:.6rem .7rem"><div class="ct" style="font-size:.82rem">④ 导出下载</div><div class="cd" style="font-size:.72rem">柱状图 + Excel 一键取走</div></div>
+        <div style="display:grid; grid-template-columns:1fr .95rem 1fr .95rem 1fr .95rem 1fr .95rem 1fr; gap:.32rem; align-items:center; width:100%">
+          <div class="card top" style="--c:#7C3AED; padding:.72rem .6rem"><div class="ct" style="font-size:.8rem">① 绑定账号</div><div class="cd" style="font-size:.71rem">卡片立刻显示 3 条 / 12.5h</div></div>
+          <div style="text-align:center; color:var(--muted); font-size:.7rem">→</div>
+          <div class="card top" style="--c:#DB2777; padding:.72rem .6rem"><div class="ct" style="font-size:.8rem">② 一句登记</div><div class="cd" style="font-size:.71rem">“社区清洁 3.5h”→ 4 条 / 16h</div></div>
+          <div style="text-align:center; color:var(--muted); font-size:.7rem">→</div>
+          <div class="card top" style="--c:#2563EB; padding:.72rem .6rem"><div class="ct" style="font-size:.8rem">③ 点开明细</div><div class="cd" style="font-size:.71rem">逐条核对日期与项目</div></div>
+          <div style="text-align:center; color:var(--muted); font-size:.7rem">→</div>
+          <div class="card top" style="--c:#0D9488; padding:.72rem .6rem"><div class="ct" style="font-size:.8rem">④ 统计并导出</div><div class="cd" style="font-size:.71rem">三次链式调用 + Excel</div></div>
+          <div style="text-align:center; color:var(--muted); font-size:.7rem">→</div>
+          <div class="card top" style="--c:#D97706; padding:.72rem .6rem"><div class="ct" style="font-size:.8rem">⑤ 活动中心</div><div class="cd" style="font-size:.71rem">校内刷新 · 全市按区筛选</div></div>
         </div>
       </div>
 
-      <div class="rv" style="--d:.28s; margin-top:1.2rem; padding-top:1.05rem; border-top:.05rem solid var(--line); display:flex; justify-content:space-between; align-items:baseline; width:100%">
-        <div style="font-size:1.55rem; font-weight:800; color:var(--ink)">谢谢，欢迎提问</div>
+      <div class="note rv" style="--d:.34s; margin-top:1.15rem; width:100%; font-size:.8rem">
+        <b>一句话总结：</b>模型负责“听懂 + 编排”，代码负责“计算 + 落盘 + 校验”——这条边界是本项目所有设计取舍的出发点。
+      </div>
+
+      <div class="rv" style="--d:.4s; margin-top:1.35rem; padding-top:1.1rem; border-top:.05rem solid var(--line); display:flex; justify-content:space-between; align-items:baseline; width:100%">
+        <div style="font-size:1.72rem; font-weight:800; color:var(--ink)">谢谢，欢迎提问</div>
         <div class="small mono">github.com/ZWQ-Tech/volunteer-hours-assistant</div>
       </div>
     </div>
-    <div class="pageno"><span class="pn">12</span> / 12</div>
+    <div class="pageno"><span class="pn">15</span> / 15</div>
   </section>
 
 </div>

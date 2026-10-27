@@ -1222,6 +1222,27 @@ GLOBAL_CSS = """
   .stat-label { font-size: 13px; color: #718096; }
   .stat-value { font-size: 26px; font-weight: 800; color: #1E3A5F; margin-top: 8px; }
   .stat-unit { font-size: 12px; color: #A0AEC0; font-weight: 400; }
+  .stat-hint { font-size: 11px; color: #2B6CB0; margin-top: 8px; font-weight: 600; }
+  .rec-card { cursor: pointer; transition: box-shadow .2s ease, transform .2s ease; }
+  .rec-card:hover { box-shadow: 0 6px 18px rgba(43,108,176,.18); transform: translateY(-2px); }
+  /* 「志愿记录总数」整卡可点：透明按钮覆盖在卡片上层，浏览器需支持 :has */
+  div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child {
+    position: relative;
+  }
+  /* 中间层不能成为定位包含块，否则按钮会跑到卡片下方 */
+  div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child div[data-testid="stVerticalBlock"],
+  div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child div[data-testid="stElementContainer"] {
+    position: static;
+  }
+  div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child div[data-testid="stButton"] {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5;
+  }
+  div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child div[data-testid="stButton"] > div {
+    width: 100%; height: 100%;
+  }
+  div[data-testid="stHorizontalBlock"]:has(.rec-card) > div[data-testid="stColumn"]:first-child div[data-testid="stButton"] button {
+    width: 100%; height: 100%; opacity: 0; background: transparent; border: none; cursor: pointer;
+  }
 
   /* ---------- 面板 ---------- */
   .panel-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -1539,46 +1560,101 @@ def render_header():
     )
 
 
-def render_stats():
-    """顶部 KPI：跟随当前记录口径——绑定账号后是“我的”，勾选全员或未绑定则是“全员”"""
-    df = view_df()
+def my_records_df():
+    """当前绑定账号本人的全部志愿记录（按日期由近到远；未绑定时为空表）"""
+    df = st.session_state.volunteer_df
     acc = get_bound_account()
-    n = len(df)
-    hrs = float(df["时长(小时)"].sum()) if n else 0.0
-    if acc and records_scope() == "me":
-        cards = [
-            ("📋", "#EBF8FF", "#2B6CB0", f"{acc['姓名']}的志愿记录", f"{n}", "条"),
-            ("⏳", "#FFFAF0", "#DD6B20", "我的累计时长", f"{hrs:.1f}", "小时"),
-            ("🎯", "#FAF5FF", "#805AD5", "我参与的项目", f"{df['志愿项目'].nunique() if n else 0}", "个"),
-            ("📈", "#F0FFF4", "#38A169", "单次平均时长", f"{(hrs / n) if n else 0:.1f}", "小时"),
-        ]
-    else:
-        cards = [
-            ("📋", "#EBF8FF", "#2B6CB0", "志愿记录总数", f"{n}", "条"),
-            ("👥", "#F0FFF4", "#38A169", "参与志愿者", f"{df['姓名'].nunique() if n else 0}", "人"),
-            ("⏳", "#FFFAF0", "#DD6B20", "累计志愿时长", f"{hrs:.1f}", "小时"),
-            ("🎯", "#FAF5FF", "#805AD5", "覆盖志愿项目", f"{df['志愿项目'].nunique() if n else 0}", "个"),
-        ]
-    cols = st.columns(4)
-    for col, (icon, bg, fg, label, value, unit) in zip(cols, cards):
-        with col:
-            st.markdown(
-                f"""
-                <div class="stat-card">
-                  <div class="stat-top">
-                    <span class="stat-icon" style="background:{bg};">{icon}</span>
-                    <span class="stat-label">{label}</span>
-                  </div>
-                  <div class="stat-value">{value} <span class="stat-unit">{unit}</span></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-    if acc and records_scope() == "all":
-        st.caption(
-            f"当前按「全员」口径展示（{acc['姓名']} 的账号仍处于绑定状态）；"
-            "关闭左侧「显示全部成员的记录」，或对助手说“只看我自己的记录”，即可切回本人数据。"
+    if acc:
+        return df[df["姓名"] == acc["姓名"]].sort_values("日期", ascending=False)
+    return df.iloc[0:0]
+
+
+def render_stats():
+    """顶部 KPI：只保留两张卡，始终跟随当前绑定账号的本人记录——
+    录入新记录、切换账号后，这里的数字都会即时更新；不受「显示全部成员」开关影响"""
+    mine = my_records_df()
+    acc = get_bound_account()
+    n = len(mine)
+    hrs = float(mine["时长(小时)"].sum()) if n else 0.0
+
+    rec_label = f"{acc['姓名']}的志愿记录" if acc else "志愿记录总数"
+    rec_hint = (
+        '<div class="stat-hint">👁 点击本卡片，查看我的每一项志愿记录</div>' if acc
+        else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后这里会显示本人的记录</div>'
+    )
+    hrs_hint = (
+        f'<div class="stat-hint" style="color:#DD6B20;">共 {n} 条记录累计 · 随录入实时更新</div>' if acc
+        else '<div class="stat-hint" style="color:#A0AEC0;">绑定账号后显示本人的累计时长</div>'
+    )
+
+    cols = st.columns(2, gap="medium")
+    with cols[0]:
+        st.markdown(
+            f"""
+            <div class="stat-card rec-card">
+              <div class="stat-top">
+                <span class="stat-icon" style="background:#EBF8FF;">📋</span>
+                <span class="stat-label">{rec_label}</span>
+              </div>
+              <div class="stat-value">{n} <span class="stat-unit">条</span></div>
+              {rec_hint}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
+        # 透明热区按钮：让整张卡片可点击（老浏览器下退化为普通按钮，功能不受影响）
+        clicked = st.button(
+            "🔍 查看我的志愿记录明细", key="open_my_records", use_container_width=True,
+        )
+    with cols[1]:
+        st.markdown(
+            f"""
+            <div class="stat-card">
+              <div class="stat-top">
+                <span class="stat-icon" style="background:#FFFAF0;">⏳</span>
+                <span class="stat-label">{"我的累计志愿时长" if acc else "累计志愿时长"}</span>
+              </div>
+              <div class="stat-value">{hrs:.1f} <span class="stat-unit">小时</span></div>
+              {hrs_hint}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    if clicked:  # 点卡片 = 展开本人记录明细（再点一次收起）
+        st.session_state.show_my_records = not st.session_state.get("show_my_records")
+        st.rerun()
+
+    if not acc:
+        st.caption("⚠️ 尚未绑定个人账号：在左侧「个人账号」选择或新建并绑定后，这两张卡片即显示本人数据。")
+    elif st.session_state.get("show_all_rows"):
+        st.caption("左侧数据表当前按「全员」口径展示；顶部两张卡片始终显示本人数据，与账号同步切换。")
+
+
+def render_my_records_detail():
+    """点开「志愿记录总数」卡片后的明细面板：本人每一项志愿记录逐条可查"""
+    acc = get_bound_account()
+    if not acc:
+        return
+    mine = my_records_df()
+    _panel_title("📋", "#2B6CB0", f"{acc['姓名']}的志愿记录明细", "每一项记录 · 按日期由近到远")
+    if mine.empty:
+        st.markdown(
+            '<div class="empty-box"><span class="big">📝</span>'
+            "你名下还没有志愿记录<br>在左侧「录入我的志愿记录」或直接对话登记第一条吧</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        total = float(mine["时长(小时)"].sum())
+        latest = mine.iloc[0]
+        st.caption(
+            f"共 {len(mine)} 条 · 合计 {total:.1f} 小时 · 最近一次："
+            f"{latest['日期']} {latest['志愿项目']} {latest['时长(小时)']:g} 小时"
+        )
+        st.dataframe(mine, use_container_width=True, hide_index=True)
+    if st.button("🔼 收起明细", key="close_my_records", use_container_width=True):
+        st.session_state.show_my_records = False
+        st.rerun()
 
 
 def _panel_title(icon, dot_color, text, hint=""):
@@ -1950,8 +2026,7 @@ def render_activity_card(a: dict, kind: str, dist: float = None):
           </div>
           <div class="act-meta">{a["主办"]} · {place_label}：{place}</div>
           <div class="act-grid">
-            <span>🗓 {a["日期"]}　{a["时间段"]}</span>
-            {dist_html}
+            <span>🗓 {a["日期"]}　{a["时间段"]}</span>{dist_html}
             <span>👥 已报名 {a["已报名"]}/{a["名额"]}（余 {left}）</span>
             <span class="act-fresh">更新于 {a.get("更新时间", 0)} 分钟前</span>
           </div>
@@ -2301,7 +2376,9 @@ def main():
 
     render_header()
     render_sidebar()          # 先渲染侧栏，账号/口径在本次运行就已确定
-    render_stats()            # KPI 与记录表跟随当前账号
+    render_stats()            # 两张 KPI 卡：始终为本人数据，随录入/切换账号实时更新
+    if st.session_state.get("show_my_records"):
+        render_my_records_detail()   # 点开「志愿记录总数」后的逐条明细
     render_account_strip()
     render_school_strip()
 
