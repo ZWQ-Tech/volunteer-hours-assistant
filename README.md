@@ -4,6 +4,11 @@
 > 一句话场景：把"查志愿记录 → 统计总时长 → 导出 Excel"和"看校内活动 → 找校外附近活动"两条业务，全部交给自然语言对话完成，由通义千问 Tool Calling 驱动。
 
 ---
+## 🚀 在线演示（无需安装，直接打开）
+
+👉 **https://volunteer-hours-assistant.app.workbuddy.host/?sharecode=PAFOCS4N5W**
+
+> 在线版已部署，浏览器直接打开即可体验。对话功能需要 API Key：打开页面后，在左侧栏「🔑 临时 API Key」输入框粘贴你的 DashScope API Key（仅存于你的浏览器会话，不写盘、不公开），即可使用"统计时长、导出 Excel、查活动"等完整智能体功能。
 
 ## 1. 项目介绍
 
