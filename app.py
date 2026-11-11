@@ -2232,26 +2232,32 @@ def render_tool_logs():
             unsafe_allow_html=True,
         )
         return
-    html = []
+    html_parts = []
     for log in reversed(logs):  # 最新在前
         color = STATUS_COLOR.get(log["status"], "#718096")
         label = STATUS_LABEL.get(log["status"], log["status"])
         icon = TOOL_ICON.get(log["tool"], "🔧")
-        html.append(
+        # 动态文本一律 HTML 转义：工具报错/入参里可能带 < > & 等字符，
+        # 不转义会导致浏览器重组 DOM，触发前端 removeChild 崩溃
+        args_txt = html.escape(str(log["args"]))
+        brief_txt = html.escape(str(log["brief"]))
+        tool_txt = html.escape(str(log["tool"]))
+        time_txt = html.escape(str(log["time"]))
+        html_parts.append(
             f"""
             <div class="log-card" style="border-left: 4px solid {color};">
               <div class="log-head">
                 <span>{icon}</span>
-                <span class="log-tool">{log['tool']}</span>
+                <span class="log-tool">{tool_txt}</span>
                 <span class="log-pill" style="background:{color};">{label}</span>
-                <span class="log-time">{log['time']}</span>
+                <span class="log-time">{time_txt}</span>
               </div>
-              <div class="log-line"><b>入参</b>　{log['args']}</div>
-              <div class="log-line"><b>结果</b>　{log['brief']}</div>
+              <div class="log-line"><b>入参</b>　{args_txt}</div>
+              <div class="log-line"><b>结果</b>　{brief_txt}</div>
             </div>
             """
         )
-    st.markdown("\n".join(html), unsafe_allow_html=True)
+    st.markdown("\n".join(html_parts), unsafe_allow_html=True)
     st.caption(f"共 {len(logs)} 次调用 · 🟢 成功 · 🟡 空结果 · 🔴 异常")
 
 
@@ -2390,10 +2396,10 @@ def render_account_bind():
     st.markdown(
         f"""
         <div class="acct-chip">
-          <div class="ac-avatar">{acc["姓名"][:1]}</div>
+          <div class="ac-avatar">{html.escape(str(acc["姓名"][:1]))}</div>
           <div class="ac-main">
-            <div class="ac-name">{acc["姓名"]}<span class="ac-id">学号 {acc["学号"]}</span></div>
-            <div class="ac-sub">{sub}</div>
+            <div class="ac-name">{html.escape(str(acc["姓名"]))}<span class="ac-id">学号 {html.escape(str(acc["学号"]))}</span></div>
+            <div class="ac-sub">{html.escape(str(sub))}</div>
             <div class="ac-kpi">已录 <b>{cnt}</b> 条 · 总 <b>{hrs:.1f}</b>h · 校内 <b>{on_h:.1f}</b>h · 校外 <b>{off_h:.1f}</b>h</div>
           </div>
         </div>
@@ -2536,9 +2542,9 @@ def render_school_bind():
     if cur:
         tags = "".join(f" · {t}" for t in cur.get("标签", [])[:2])
         st.markdown(
-            f'<div class="school-chip">✅ {cur["名称"]}'
-            f'<span>{cur.get("省份","")} · {cur.get("城市","")} · {cur.get("区","")}{tags}</span>'
-            f'<span>{cur.get("地址","")}</span></div>',
+            f'<div class="school-chip">✅ {html.escape(str(cur["名称"]))}'
+            f'<span>{html.escape(str(cur.get("省份","")))} · {html.escape(str(cur.get("城市","")))} · {html.escape(str(cur.get("区","")))}{html.escape(str(tags))}</span>'
+            f'<span>{html.escape(str(cur.get("地址","")))}</span></div>',
             unsafe_allow_html=True,
         )
         st.caption("📍 省 / 市 / 区县与活动地区已随学校自动同步")
@@ -2619,16 +2625,17 @@ def render_activity_detail(a: dict, kind: str, dist: float = None):
         ("注意事项", d.get("注意", "请遵守主办方现场安排")),
     ]
     body = "".join(
-        f'<div class="det-row"><span class="det-k">{k}</span><span class="det-v">{v}</span></div>'
+        f'<div class="det-row"><span class="det-k">{html.escape(str(k))}</span>'
+        f'<span class="det-v">{html.escape(str(v))}</span></div>'
         for k, v in rows
     )
-    meta = f'{a["日期"]}　{a["时间段"]}　{a["时长"]:g} 小时'
+    meta = f'{html.escape(str(a["日期"]))}　{html.escape(str(a["时间段"]))}　{a["时长"]:g} 小时'
     if dist is not None:
-        meta += f'　·　距校区 {dist:.1f} km　·　{region}'
+        meta += f'　·　距校区 {dist:.1f} km　·　{html.escape(str(region))}'
     st.markdown(
         f'<div class="det-box">'
         f'<div class="det-row"><span class="det-k">时间地点</span>'
-        f'<span class="det-v"><b>{meta}</b><br>{a.get("地址") or a.get("地点", "")}</span></div>'
+        f'<span class="det-v"><b>{meta}</b><br>{html.escape(str(a.get("地址") or a.get("地点", "")))}</span></div>'
         f'{body}</div>',
         unsafe_allow_html=True,
     )
@@ -2789,8 +2796,8 @@ def render_activities():
         f"""
         <div class="crumb">
           <span class="chip-scope {scope_cls}">{scope_ico} {scope}活动</span>
-          <span>📍 <b>{area_txt}</b></span>
-          <span>{kw_txt or '· 不限关键字'}</span>
+          <span>📍 <b>{html.escape(str(area_txt))}</b></span>
+          <span>{html.escape(str(kw_txt)) or '· 不限关键字'}</span>
           <span class="res">共 {total_n} 个 · 校内 {len(on_items)} / 校外 {len(off_rows)}</span>
         </div>
         """,
@@ -2812,7 +2819,7 @@ def render_activities():
     if want_on:
         st.markdown(
             f'<div class="sec-head on">🏫 校内活动 <span>{len(on_items)} 个'
-            + (f" · 来自 {school['名称']}" if school else "")
+            + (f" · 来自 {html.escape(str(school['名称']))}" if school else "")
             + "</span></div>",
             unsafe_allow_html=True,
         )
@@ -3190,7 +3197,7 @@ def _app_card_head(app: dict, extra: str = "") -> str:
         f'<div class="app-card">'
         f'<div class="app-head"><span class="app-proj">{html.escape(app["志愿项目"])}</span>'
         f'<span class="app-badge" style="color:{color};background:{bg}">{txt}</span></div>'
-        f'<div class="app-meta">{app["日期"]} · <b>{app["时长(小时)"]:g} h</b> · 校外'
+        f'<div class="app-meta">{html.escape(str(app["日期"]))} · <b>{app["时长(小时)"]:g} h</b> · 校外'
         + (f' · {html.escape(app["地点"])}' if app.get("地点") else "")
         + f'{extra}</div>'
         + (f'<div class="app-note">备注：{html.escape(app["说明"])}</div>' if app.get("说明") else "")
@@ -3208,10 +3215,10 @@ def render_apply_tab():
             st.info("请先在左侧「个人账号」绑定或新建账号，再提交申请。")
         else:
             st.markdown(
-                f'<div class="acct-chip"><div class="ac-avatar">{acc["姓名"][:1]}</div>'
-                f'<div class="ac-main"><div class="ac-name">{acc["姓名"]}'
-                f'<span class="ac-id">学号 {acc["学号"]}</span></div>'
-                f'<div class="ac-sub">{" · ".join(x for x in [acc.get("学院",""), acc.get("专业","")] if x) or "未填写院系信息"}</div>'
+                f'<div class="acct-chip"><div class="ac-avatar">{html.escape(str(acc["姓名"][:1]))}</div>'
+                f'<div class="ac-main"><div class="ac-name">{html.escape(str(acc["姓名"]))}'
+                f'<span class="ac-id">学号 {html.escape(str(acc["学号"]))}</span></div>'
+                f'<div class="ac-sub">{html.escape(" · ".join(x for x in [acc.get("学院",""), acc.get("专业","")] if x) or "未填写院系信息")}</div>'
                 f'</div></div>', unsafe_allow_html=True)
             with st.form("apply_form", clear_on_submit=True):
                 proj = st.text_input("志愿活动名称 *", placeholder="例如 上海图书馆周末导览志愿服务")
@@ -3249,7 +3256,7 @@ def render_apply_tab():
                 "在左侧填写活动信息即可提交第一份校外时长申请</div>",
                 unsafe_allow_html=True)
         for a in reversed(mine):
-            extra = f' · 提交于 {a["提交时间"]}'
+            extra = f' · 提交于 {html.escape(str(a["提交时间"]))}'
             st.markdown(_app_card_head(a, extra), unsafe_allow_html=True)
             if a["材料"]:
                 st.caption("📎 已附材料：" + "、".join(f[0] for f in a["材料"]))
@@ -3753,12 +3760,13 @@ def render_teacher_console():
                     f'<div class="app-card teacher">'
                     f'<div class="app-head"><span class="app-proj">{html.escape(a["志愿项目"])}</span>'
                     f'<span class="app-badge" style="color:#F59E0B;background:#FEF3C7">🟡 待审核</span></div>'
-                    f'<div class="app-meta">{a["姓名"]} · 学号 {a["学号"]} · '
+                    f'<div class="app-meta">{html.escape(str(a["姓名"]))} · 学号 {html.escape(str(a["学号"]))} · '
                     f'{html.escape(a["学院"] or "未填写学院")} · {html.escape(a["专业"] or "未填写专业")}</div>'
-                    f'<div class="app-meta">{a["日期"]} · 申请 <b>{a["时长(小时)"]:g} 小时</b> · 校外'
+                    f'<div class="app-meta">{html.escape(str(a["日期"]))} · 申请 <b>{a["时长(小时)"]:g} 小时</b> · 校外'
                     + (f' · {html.escape(a["地点"])}</div>' if a.get("地点") else "</div>")
                     + (f'<div class="app-note">学生说明：{html.escape(a["说明"])}</div>' if a.get("说明") else "")
-                    + f'<div class="app-meta" style="font-size:11.5px;color:#94A3B8">提交于 {a["提交时间"]} · 编号 {a["id"]}</div>'
+                    + f'<div class="app-meta" style="font-size:11.5px;color:#94A3B8">'
+                      f'提交于 {html.escape(str(a["提交时间"]))} · 编号 {html.escape(str(a["id"]))}</div>'
                     "</div>", unsafe_allow_html=True)
                 if a["材料"]:
                     def _is_image(blob) -> bool:
@@ -3835,7 +3843,7 @@ def render_teacher_console():
             st.dataframe(pd.DataFrame(rows), use_container_width=True,
                          hide_index=True, height=280)
             medals = ["🥇", "🥈", "🥉"]
-            tops = "　".join(f"{medals[i] if i < 3 else i + 1} {r['姓名']} {r['总时长(小时)']:g}h"
+            tops = "　".join(f"{medals[i] if i < 3 else i + 1} {html.escape(str(r['姓名']))} {r['总时长(小时)']:g}h"
                              for i, r in enumerate(rows[:5]))
             st.markdown(f'<div class="rank-strip">🏆 志愿时长 TOP5：{tops}</div>',
                         unsafe_allow_html=True)
