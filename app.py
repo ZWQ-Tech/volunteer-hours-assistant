@@ -19,6 +19,7 @@ import html
 import io
 import json
 import os
+import re
 import time
 import traceback
 from datetime import date, datetime
@@ -300,13 +301,17 @@ def init_state():
         st.session_state.import_preview = None   # (文件名, rows, 警告列表) 待确认的导入预览
     # —— 校外志愿时长申请（学生提交 → 教师审核）——
     if "applications" not in st.session_state:
-        st.session_state.applications = []       # 申请列表（含状态与审核意见）
+        st.session_state.applications = _demo_applications()   # 演示申请 + 学生新提交
     if "teacher_unlocked" not in st.session_state:
         st.session_state.teacher_unlocked = False  # 教师工作台是否已解锁
     if "teacher_chat" not in st.session_state:
         st.session_state.teacher_chat = []      # 教师端 AI 汇总问答历史
     if "word_file" not in st.session_state:
         st.session_state.word_file = None        # (文件名, bytes) 生成的 Word 汇总报告
+    if "ai_rows" not in st.session_state:
+        st.session_state.ai_rows = None          # AI 识别出的待导入记录行
+    if "pending_teacher_q" not in st.session_state:
+        st.session_state.pending_teacher_q = ""  # 教师助手待处理的问题（快捷按钮触发）
 
 
 def migrate_df(df):
@@ -1683,6 +1688,13 @@ GLOBAL_CSS = """
     border: 1px solid #F6E05E; background: #FFFBEB; color: #92400E;
     border-radius: 12px; padding: 10px 16px; font-size: 13.5px; margin-bottom: 14px;
   }
+  .teacher-head {
+    border: 1px solid #CBD5E0; border-left: 5px solid #1E3A5F;
+    border-radius: 14px; padding: 14px 22px; background: #fff;
+    box-shadow: 0 2px 10px rgba(45,55,72,.06); margin-bottom: 14px;
+  }
+  .teacher-head .th-title { font-size: 21px; font-weight: 800; color: #1E3A5F; }
+  .teacher-head .th-sub { font-size: 13px; color: #64748B; margin-top: 4px; }
   .rank-strip {
     border: 1px solid #E2E8F0; background: #F0FDF4; color: #14532D;
     border-radius: 12px; padding: 10px 16px; font-size: 13.5px; margin-top: 10px;
@@ -2959,6 +2971,70 @@ APP_BADGE = {
 }
 
 
+def _make_material_png(text: str = "志愿服务证明") -> bytes:
+    """演示用：现场生成一张小尺寸证明材料图（避免在源码里嵌大体积二进制）"""
+    from io import BytesIO
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (320, 200), (30, 58, 95))
+    d = ImageDraw.Draw(img)
+    d.rectangle([8, 8, 311, 191], outline=(180, 200, 230), width=2)
+    d.text((30, 40), text, fill=(255, 255, 255))
+    d.text((30, 90), "盖章：志愿服务中心", fill=(200, 214, 240))
+    d.text((30, 130), "日期：2026-11-01", fill=(200, 214, 240))
+    bio = BytesIO()
+    img.save(bio, format="PNG")
+    return bio.getvalue()
+
+
+def _demo_applications() -> list:
+    """预置 4 条演示申请：两条待审核（其一带材料）、一条已退回（带原因）、一条已通过"""
+    today = datetime.now()
+    return [
+        {   # 待审核 · 带证明材料（演示“审查+材料预览”）
+            "id": "APP-DEMO01", "姓名": "王五", "学号": "2023003",
+            "学院": "外国语学院", "专业": "英语 2301 班",
+            "志愿项目": "上海科技馆展厅科普引导", "日期": "2026-11-01",
+            "时长(小时)": 4.0, "地点": "浦东新区上海科技馆",
+            "说明": "周末两天在展厅做引导与讲解，共 4 小时，已盖服务中心章。",
+            "材料": [("服务证明.png", _make_material_png())],
+            "状态": APP_PENDING, "提交时间": "2026-11-02 09:10",
+            "审核时间": "", "审核意见": "",
+        },
+        {   # 待审核 · 无材料（演示“提醒补材料后退回”）
+            "id": "APP-DEMO02", "姓名": "李四", "学号": "2023002",
+            "学院": "管理学院", "专业": "工商管理 2302 班",
+            "志愿项目": "陆家嘴社区图书整理", "日期": "2026-11-05",
+            "时长(小时)": 3.5, "地点": "浦东新区陆家嘴街道",
+            "说明": "协助社区阅览室整理图书与登记借阅。",
+            "材料": [],
+            "状态": APP_PENDING, "提交时间": "2026-11-06 15:42",
+            "审核时间": "", "审核意见": "",
+        },
+        {   # 已退回 · 有原因（演示学生端可见原因）
+            "id": "APP-DEMO03", "姓名": "赵六", "学号": "2023004",
+            "学院": "护理学院", "专业": "护理学 2303 班",
+            "志愿项目": "寒假返乡招生宣讲", "日期": "2026-10-28",
+            "时长(小时)": 1.5, "地点": "老家中学（线下）",
+            "说明": "回母校做招生宣讲。",
+            "材料": [],
+            "状态": APP_REJECTED, "提交时间": "2026-10-29 10:05",
+            "审核时间": "2026-10-30 09:30",
+            "审核意见": "校外活动需提供服务证明（盖章版照片），请补充材料后重新提交。",
+        },
+        {   # 已通过 · 对应数据表里李四已有的校外记录（口径自洽）
+            "id": "APP-DEMO04", "姓名": "李四", "学号": "2023002",
+            "学院": "管理学院", "专业": "工商管理 2302 班",
+            "志愿项目": "社区敬老院慰问", "日期": "2026-10-01",
+            "时长(小时)": 6.0, "地点": "浦东新区金桥敬老院",
+            "说明": "国庆场陪伴活动。",
+            "材料": [],
+            "状态": APP_OK, "提交时间": "2026-10-02 11:20",
+            "审核时间": "2026-10-03 08:55",
+            "审核意见": "审核通过，时长已计入该同学校外志愿记录。",
+        },
+    ]
+
+
 def submit_off_campus_application(project: str, date: str, hours: float,
                                   place: str = "", note: str = "",
                                   files: list = None) -> dict:
@@ -3280,8 +3356,295 @@ def build_word_report() -> bytes:
     return bio.getvalue()
 
 
+# ============================ 教师智能助手（教师视角 Tool Calling） ============================
+TEACHER_SYSTEM_PROMPT = (
+    "你是学校「志愿时长教师工作台」里的智能助手，服务对象是负责志愿时长管理的老师。"
+    "老师会用自然语言提出查询、统计、审查、出报告等需求，你必须优先调用提供的工具完成，禁止编造数据。"
+    "可用的操作：查询全校（或某位学生）在起止日期内的志愿记录（query_dept_records，日期留空表示全部）；"
+    "全员统计：人数、总时长、校内/校外分项、人均与排名（dept_summary）；"
+    "查看待审核的校外志愿申请（list_pending_applications）；"
+    "生成按学院/专业分组的 Word 汇总报告（export_word_report，生成后提醒老师到「全校汇总」页签下载）。"
+    "老师提到相对时间（本月、上周）时先换算成 YYYY-MM-DD。"
+    "回答先给结论再给关键数字，简洁、使用中文。与学生端不同，这里的数据口径始终是全校全员。"
+)
+
+TEACHER_TOOLS_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "query_dept_records",
+            "description": "查询全校学生（或指定学生）某段时间内的志愿记录与时长合计。日期留空表示不限。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_date": {"type": "string", "description": "起始日期 YYYY-MM-DD，留空不限"},
+                    "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD，留空不限"},
+                    "name": {"type": "string", "description": "学生姓名，留空表示全部学生"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dept_summary",
+            "description": "全员统计：参与人数、总记录数、总时长、校内/校外分项、人均与按人排名。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_pending_applications",
+            "description": "列出所有待教师审核的校外志愿申请（学生、活动、日期、时长、是否有材料）。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "export_word_report",
+            "description": "生成按学院/专业分组的学生志愿时长汇总 Word 报告，生成后需到「全校汇总」页签下载。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]
+
+TEACHER_TOOL_IMPL = {}      # 教师工具注册表：见 _teacher_export_word 之后统一注册
+
+
+def _teacher_query_records(start_date: str = "", end_date: str = "", name: str = "") -> dict:
+    """教师工具1：按日期 / 姓名查全校志愿记录（全员口径，与登录账号无关）"""
+    df = st.session_state.volunteer_df
+    if df.empty:
+        return {"status": "empty", "message": "当前没有任何志愿记录。"}
+    out = df.copy()
+    conds = []
+    if str(start_date or "").strip():
+        d0 = _parse_date(str(start_date))
+        if d0 is None:
+            return {"status": "error", "message": f"起始日期「{start_date}」格式不正确。"}
+        conds.append(out["日期"] >= d0.strftime("%Y-%m-%d"))
+    if str(end_date or "").strip():
+        d1 = _parse_date(str(end_date))
+        if d1 is None:
+            return {"status": "error", "message": f"结束日期「{end_date}」格式不正确。"}
+        conds.append(out["日期"] <= d1.strftime("%Y-%m-%d"))
+    nm = str(name or "").strip()
+    if nm:
+        conds.append(out["姓名"] == nm)
+        if not out[out["姓名"] == nm].shape[0]:
+            return {"status": "empty", "message": f"没有叫「{nm}」的学生的志愿记录。"}
+    for c in conds:
+        out = out[c]
+    if out.empty:
+        return {"status": "empty", "message": "该条件下没有查到记录。"}
+    hours = pd.to_numeric(out["时长(小时)"], errors="coerce").fillna(0)
+    on_h = float(hours[out["类型"] == KIND_ON].sum())
+    total = float(hours.sum())
+    return {
+        "status": "success",
+        "记录数": int(len(out)), "涉及学生": int(out["姓名"].nunique()),
+        "合计(小时)": round(total, 1), "校内(小时)": round(on_h, 1),
+        "校外(小时)": round(total - on_h, 1),
+        "记录": out[RECORD_COLUMNS].to_dict("records"),
+        "message": (f"共查到 {len(out)} 条记录、{out['姓名'].nunique()} 名学生，合计 {total:g} 小时"
+                    f"（校内 {on_h:g} + 校外 {total - on_h:g}）。"),
+    }
+
+
+def _teacher_list_applications() -> dict:
+    """教师工具2：列出待审核的校外志愿申请"""
+    apps = [a for a in st.session_state.applications if a["状态"] == APP_PENDING]
+    if not apps:
+        return {"status": "empty", "message": "目前没有待审核的申请，全部处理完毕。"}
+    return {
+        "status": "success", "待审核数": len(apps),
+        "申请": [{"姓名": a["姓名"], "志愿项目": a["志愿项目"], "日期": a["日期"],
+                   "时长(小时)": a["时长(小时)"], "材料份数": len(a["材料"]), "编号": a["id"]}
+                  for a in apps],
+        "message": f"有 {len(apps)} 条申请待审核，请在「待审核」页签处理。",
+    }
+
+
+def _teacher_export_word() -> dict:
+    """教师工具3：生成 Word 汇总报告（结果挂到会话，供「全校汇总」页签下载）"""
+    if not DOCX_OK:
+        return {"status": "error", "message": "缺少 python-docx 依赖，无法生成报告。"}
+    if not teacher_summary_rows():
+        return {"status": "error", "message": "暂无志愿记录，无法生成报告。"}
+    st.session_state.word_file = (
+        f"志愿时长汇总报告_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+        build_word_report())
+    log_event("TEACHER_EXPORT_WORD", st.session_state.word_file[0])
+    return {"status": "success",
+            "message": "Word 汇总报告已生成，请到「全校汇总」页签点击下载按钮保存。"}
+
+
+TEACHER_TOOL_IMPL.update({
+    "query_dept_records": _teacher_query_records,
+    "dept_summary": dept_summary,
+    "list_pending_applications": _teacher_list_applications,
+    "export_word_report": _teacher_export_word,
+})
+
+
+def run_teacher_agent(user_input: str, status=None):
+    """教师智能助手：与 run_agent 同机制的 Tool Calling 循环，但工具与上下文换成教师视角。"""
+    client = OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=60.0, max_retries=2)
+    st.session_state.teacher_chat.append(("user", user_input))
+    st.session_state.last_failed_input = None
+    sys_content = TEACHER_SYSTEM_PROMPT + (
+        f"\n今天是 {datetime.now().strftime('%Y-%m-%d')}。"
+        "老师提到“今天/本月/上周”等相对时间时，必须基于这一天换算成具体日期。"
+    )
+    messages = [{"role": "system", "content": sys_content}]
+    for role, text in st.session_state.teacher_chat:
+        messages.append({"role": role, "content": text})
+    try:
+        for _ in range(6):
+            resp = create_completion_with_retry(
+                client, status=status,
+                model=MODEL_NAME, messages=messages,
+                tools=TEACHER_TOOLS_SCHEMA, temperature=0.3,
+            )
+            msg = resp.choices[0].message
+            if msg.tool_calls:
+                if status is not None:
+                    status.update(label="🛠️ 正在执行教师工具...", expanded=True, state="running")
+                normalized_calls, parsed_calls = [], []
+                for tc in msg.tool_calls:
+                    raw = tc.function.arguments or ""
+                    try:
+                        args = json.loads(raw) if raw.strip() else {}
+                        ok = isinstance(args, dict)
+                    except Exception:
+                        args, ok = {}, False
+                    normalized_calls.append({"id": tc.id, "type": "function",
+                                             "function": {"name": tc.function.name,
+                                                          "arguments": json.dumps(args, ensure_ascii=False) if ok else "{}"}})
+                    parsed_calls.append((tc.function.name, args, ok, tc.id))
+                messages.append({"role": "assistant", "content": msg.content or "",
+                                 "tool_calls": normalized_calls})
+                for tname, args, ok, call_id in parsed_calls:
+                    if status is not None:
+                        status.update(label=f"🛠️ 执行工具：{tname}", expanded=True, state="running")
+                    if not ok:
+                        result = {"status": "error", "message": "工具参数不是合法 JSON，已跳过。"}
+                    else:
+                        fn = TEACHER_TOOL_IMPL.get(tname)
+                        result = fn(**args) if fn else {"status": "error", "message": f"未知工具 {tname}"}
+                    if status is not None:
+                        status.write(
+                            f"🔧 `{tname}` → {STATUS_LABEL.get(result.get('status','unknown'), result.get('status'))}："
+                            f"{result.get('message','')}")
+                    messages.append({"role": "tool", "tool_call_id": call_id,
+                                     "content": json.dumps(result, ensure_ascii=False)})
+                continue
+            reply = msg.content or "（模型未返回内容）"
+            st.session_state.teacher_chat.append(("assistant", reply))
+            if status is not None:
+                status.update(label="✅ 处理完成", state="complete")
+            return
+        st.session_state.teacher_chat.append(
+            ("assistant", "⚠️ 工具调用轮次超出上限，请把需求拆分得更具体一些再试。"))
+        st.session_state.last_failed_input = user_input
+        if status is not None:
+            status.update(label="⚠️ 轮次超限", state="error")
+    except Exception as e:
+        st.session_state.teacher_chat.append(("assistant", friendly_model_error(e)))
+        st.session_state.last_failed_input = user_input
+        log_event("TEACHER_AGENT_FAIL", f"{type(e).__name__}: {e}")
+        if status is not None:
+            status.update(label="❌ 调用失败", state="error")
+
+
+# ============================ 教师批量导入：大模型识别任意文档 ============================
+def _extract_doc_text(file) -> tuple:
+    """从上传的 xlsx / csv / docx / txt 里提取文本，返回 (文本, 方式说明)"""
+    name = (getattr(file, "name", "") or "").lower()
+    data = file.getvalue()
+    if name.endswith((".xlsx", ".xls")):
+        from io import BytesIO as _B
+        df = pd.read_excel(_B(data))
+        return df.fillna("").astype(str).to_csv(index=False), f"Excel 表格（{len(df)} 行）自动识别列"
+    if name.endswith(".csv"):
+        for enc in ("utf-8-sig", "utf-8", "gbk"):
+            try:
+                return data.decode(enc), "CSV 文本"
+            except Exception:
+                continue
+        return data.decode("utf-8", errors="replace"), "CSV 文本（utf-8 兜底）"
+    if name.endswith(".docx"):
+        from docx import Document
+        doc = Document(io.BytesIO(data))
+        parts = [p.text for p in doc.paragraphs if p.text.strip()]
+        for tbl in doc.tables:
+            for row in tbl.rows:
+                parts.append("\t".join(c.text for c in row.cells))
+        return "\n".join(parts), "Word 文档段落与表格"
+    if name.endswith(".txt"):
+        for enc in ("utf-8-sig", "utf-8", "gbk"):
+            try:
+                return data.decode(enc), "纯文本"
+            except Exception:
+                continue
+        return data.decode("utf-8", errors="replace"), "纯文本（utf-8 兜底）"
+    raise ValueError("暂不支持该格式，请上传 xlsx / csv / docx / txt。")
+
+
+def ai_extract_records(text: str) -> dict:
+    """大模型把任意格式的汇总文档文本识别成结构化的志愿记录行。
+    返回 {status, rows(每行: 姓名/学号/志愿项目/日期/时长(小时)/类型/地点/备注), 警告列表}"""
+    if not str(text or "").strip():
+        return {"status": "error", "message": "没有读到文本内容，请确认上传的文件不为空。"}
+    if len(text) > 12000:
+        text = text[:12000]
+    sys = (
+        "你是学校志愿时长管理系统的数据录入助手。下面是一段从老师上传的汇总文档中提取的文本，"
+        "格式可能不规整。请从中识别出每一条学生志愿记录，输出 JSON 数组，"
+        "每个元素包含字段：姓名、学号、志愿项目、日期（YYYY-MM-DD）、时长(小时)（数字）、"
+        "类型（校内或校外，按活动内容判断）、地点、备注。缺失字段留空字符串，但姓名、志愿项目、日期、时长必须有。"
+        f"今天是 {datetime.now().strftime('%Y-%m-%d %A')}。文中没有写年份的日期，一律按当前年份 "
+        f"{datetime.now().year} 补全，不要使用其他年份。"
+        "没有日期的记录：如果文本里写了\"上学期/9月\"等线索就推断，实在没有就填空字符串。"
+        "只输出 JSON 数组本身，不要任何解释文字、不要 markdown 代码块标记。"
+        f"\n文档文本：\n{text}"
+    )
+    try:
+        client = OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=90, max_retries=1)
+        resp = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "system", "content": sys}],
+            temperature=0.1,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        return {"status": "error", "message": f"AI 识别失败：{friendly_model_error(e)}"}
+    # 容错解析：剥掉可能残留的 ```json 包裹，截取第一个 [ 到最后一个 ]
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.S).strip()
+    m = re.search(r"\[.*\]", raw, flags=re.S)
+    if not m:
+        return {"status": "error", "message": f"模型没有输出可识别的记录列表（返回前 100 字：{raw[:100]}）。"}
+    try:
+        rows = json.loads(m.group(0))
+    except Exception:
+        return {"status": "error", "message": "模型输出的 JSON 不合法，请换个更规整的文档再试。"}
+    if not isinstance(rows, list) or not rows:
+        return {"status": "error", "message": "文档里没有识别出任何志愿记录。"}
+    warn = []
+    rows = [r if isinstance(r, dict) else {} for r in rows]
+    rows = [{k: (("" if v is None else v) if isinstance(k, str) else "") for k, v in r.items()}
+            for r in rows]
+    if len(text) >= 12000:
+        warn.append("文档过长，仅识别了前 12000 字符")
+    log_event("AI_EXTRACT", f"{len(rows)} rows")
+    return {"status": "success", "rows": rows, "warns": warn,
+            "message": f"AI 从文档中识别出 {len(rows)} 条志愿记录，请核对下方预览再确认导入。"}
+
+
 def render_teacher_tab():
-    """教师工作台：密钥解锁 → 审查申请（通过/退回）· 全校汇总 · AI 问答 · Word 导出"""
+    """学生页里的「教师工作台」入口：只负责密钥校验；解锁成功后整页切换为教师独立控制台"""
     if not st.session_state.get("teacher_unlocked"):
         _panel_title("🔒", "#B7791F", "教师工作台", "输入密钥进入，仅供负责志愿时长管理的老师使用")
         c = st.columns([1.0, 1.2, 1.0])[1]
@@ -3290,7 +3653,7 @@ def render_teacher_tab():
                 '<div class="lock-box"><div style="font-size:40px;text-align:center">🔐</div>'
                 '<div style="text-align:center;font-weight:700;margin-bottom:8px">教师 / 管理员登录</div>'
                 '<div style="text-align:center;color:#718096;font-size:12.5px;margin-bottom:10px">'
-                "审核校外志愿申请 · 查看全校志愿时长汇总 · AI 汇总问答 · 一键导出 Word 报告</div></div>",
+                "密钥正确后将进入独立的教师工作台页面：审核申请 · 全校汇总 · 批量导入 · 智能助手</div></div>",
                 unsafe_allow_html=True)
             with st.form("teacher_login"):
                 key = st.text_input("教师密钥", type="password", placeholder="请输入教师密钥")
@@ -3307,12 +3670,35 @@ def render_teacher_tab():
             st.caption("💡 演示环境默认密钥：`sanda2026`（可在项目 .env 的 TEACHER_KEY 中修改）")
         return
 
+    render_teacher_console()
+
+
+def render_teacher_console():
+    """教师独立控制台：解锁后的整页视图（学生界面完全隐藏）"""
+    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
     apps = st.session_state.applications
     pending = [a for a in apps if a["状态"] == APP_PENDING]
     done = [a for a in apps if a["状态"] != APP_PENDING]
+    school = st.session_state.get("bound_school") or {}
+    n_students = st.session_state.volunteer_df["姓名"].nunique() if len(st.session_state.volunteer_df) else 0
+
+    ch, cx = st.columns([5.6, 1])
+    ch.markdown(
+        f"""
+        <div class="teacher-head">
+          <div class="th-title">🎓 志愿时长教师工作台</div>
+          <div class="th-sub">{school.get("名称", "未绑定学校")} ·
+            学生 <b>{n_students}</b> 人 · 待审核 <b>{len(pending)}</b> 条 · 已处理 <b>{len(done)}</b> 条</div>
+        </div>
+        """, unsafe_allow_html=True)
+    if cx.button("🔒 退出工作台", key="teacher_logout_top", use_container_width=True):
+        st.session_state.teacher_unlocked = False
+        st.session_state.toast = ("success", "已退出教师工作台，回到学生页面。")
+        st.rerun()
+
     t1, t2, t3, t4 = st.tabs([
-        f"📥 待审核（{len(pending)}）", "📊 全校志愿汇总",
-        "🤖 AI 汇总问答", "📄 导出 Word 报告"])
+        f"📥 待审核（{len(pending)}）", "📊 全校汇总",
+        "⬆️ 批量导入时长", "🤖 智能助手"])
 
     # ---------- Tab 1 待审核 ----------
     with t1:
@@ -3416,48 +3802,11 @@ def render_teacher_tab():
                              for i, r in enumerate(rows[:5]))
             st.markdown(f'<div class="rank-strip">🏆 志愿时长 TOP5：{tops}</div>',
                         unsafe_allow_html=True)
-
-    # ---------- Tab 3 AI 汇总问答 ----------
-    with t3:
-        st.caption("🤖 基于全校实时志愿数据直接提问，例如：本学期谁最积极？哪个学院校外参与多？有无异常数据？")
-        qc1, qc2, qc3 = st.columns(3)
-        if qc1.button("整体志愿情况", use_container_width=True):
-            st.session_state.pending_teacher_q = "请总结全校学生志愿服务整体情况，并指出重点数字。"
-        if qc2.button("排名与点评", use_container_width=True):
-            st.session_state.pending_teacher_q = "请给出志愿时长排名与简要点评，并给出表扬建议。"
-        if qc3.button("异常提醒", use_container_width=True):
-            st.session_state.pending_teacher_q = "请检查数据中有无异常（时长过长或为0、分布不均等），逐个点名说明。"
-        for role, text in st.session_state.teacher_chat:
-            if role == "user":
-                st.markdown(f'<div class="user-bubble">❓ {html.escape(text)}</div>',
-                            unsafe_allow_html=True)
-            else:
-                with st.chat_message("assistant"):
-                    st.markdown(text)
-        with st.form("teacher_q", clear_on_submit=True):
-            q = st.text_input("向 AI 提问（全校数据汇总分析）", placeholder="例如：对比各学院志愿参与度")
-            if st.form_submit_button("发送", use_container_width=True, type="primary") or \
-                    st.session_state.get("pending_teacher_q"):
-                pend = st.session_state.pop("pending_teacher_q", "")
-                question = q.strip() or pend
-                if question:
-                    st.session_state.teacher_chat.append(("user", question))
-                    with st.spinner("🤖 正在基于全校数据汇总分析..."):
-                        ans = _teacher_ai_answer(question)
-                    st.session_state.teacher_chat.append(("assistant", ans))
-                    st.rerun()
-
-    # ---------- Tab 4 Word 报告 ----------
-    with t4:
-        st.markdown(
-            '<div class="app-card">'
-            '<div class="app-proj">📄 学生志愿时长汇总 Word 报告</div>'
-            '<div class="app-meta">内容：总体情况 → 按「学院 → 专业」分组的学生明细表 → TOP 排名与说明</div>'
-            '<div class="app-note">数据来源为系统实时记录（含审核通过的校外申请），生成后可直接下载 .docx。</div>'
-            "</div>", unsafe_allow_html=True)
-        gen, dl = st.columns(2)
-        if gen.button("🛠️ 生成汇总报告", use_container_width=True, type="primary",
-                      key="gen_word_btn"):
+        # 一键生成 / 下载 Word 汇总报告
+        st.divider()
+        gw, dw = st.columns(2)
+        if gw.button("📄 生成 Word 汇总报告", use_container_width=True, type="primary",
+                     key="gen_word_btn"):
             if not teacher_summary_rows():
                 st.session_state.toast = ("error", "暂无志愿记录，无法生成报告。")
             elif not DOCX_OK:
@@ -3466,23 +3815,125 @@ def render_teacher_tab():
                 st.session_state.word_file = (
                     f"志愿时长汇总报告_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
                     build_word_report())
-                st.session_state.toast = ("success", "Word 汇总报告已生成，点击右侧按钮下载。")
+                st.session_state.toast = ("success", "Word 汇总报告已生成，点击右侧下载。")
             st.rerun()
         wf = st.session_state.get("word_file")
         if wf:
-            dl.download_button("⬇️ 下载 .docx", data=wf[1], file_name=wf[0],
+            dw.download_button("⬇️ 下载 .docx", data=wf[1], file_name=wf[0],
                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                use_container_width=True, key="dl_word_btn")
         else:
-            with dl:
-                st.caption("先点左侧生成，再下载")
+            with dw:
+                st.caption("按「学院 → 专业」分组 · 生成后下载")
 
-    # 退出登录
-    st.divider()
-    if st.button("🔒 退出教师工作台", key="teacher_logout"):
-        st.session_state.teacher_unlocked = False
-        st.session_state.toast = ("success", "已退出教师工作台。")
-        st.rerun()
+    # ---------- Tab 3 批量导入时长 ----------
+    with t3:
+        st.markdown(
+            '<div class="app-note">方式一：把任意格式的汇总文档交给大模型识别；'
+            '方式二：按标准 Excel 模板批量导入。两种都会自动查重、自动登记新同学。</div>',
+            unsafe_allow_html=True)
+
+        st.markdown("**🤖 方式一 · 大模型识别导入（xlsx / csv / docx / txt）**")
+        up = st.file_uploader("上传汇总文档", type=["xlsx", "xls", "csv", "docx", "txt"],
+                              key="teacher_doc_up",
+                              help="格式可以不规整，AI 会自动识别每条记录的姓名、活动、日期与时长")
+        if up is not None:
+            try:
+                text, how = _extract_doc_text(up)
+                st.caption(f"已读取 **{up.name}**（{how}，{len(text)} 字符）")
+                if st.button("🤖 AI 识别志愿记录", use_container_width=True, key="ai_extract_btn",
+                             type="primary"):
+                    with st.spinner("🤖 大模型正在识别文档中的志愿记录..."):
+                        res = ai_extract_records(text)
+                    if res.get("status") == "success":
+                        st.session_state.ai_rows = res["rows"]
+                        for w in res.get("warns", []):
+                            st.warning(w)
+                        st.session_state.toast = ("success", res.get("message", ""))
+                    else:
+                        st.session_state.toast = ("error", res.get("message", ""))
+                    st.rerun()
+            except Exception as e:
+                st.error(f"文件读取失败：{e}")
+        ai_rows = st.session_state.get("ai_rows")
+        if ai_rows:
+            st.caption(f"AI 识别出 **{len(ai_rows)} 条**记录，请核对后确认导入：")
+            st.dataframe(pd.DataFrame(ai_rows), use_container_width=True,
+                         hide_index=True, height=220)
+            if st.button(f"✔️ 确认导入这 {len(ai_rows)} 条", use_container_width=True,
+                         key="ai_import_btn"):
+                res = import_volunteer_excel(ai_rows)
+                add_log("import_volunteer_excel", {"来源": "AI 识别", "行数": len(ai_rows)}, res)
+                st.session_state.ai_rows = None
+                st.session_state.toast = (
+                    "success" if res.get("status") == "success" else "error",
+                    res.get("message", ""))
+                st.rerun()
+
+        st.divider()
+        st.markdown("**📋 方式二 · 标准模板导入（Excel 按列填写，无需 AI）**")
+        tpl = _excel_template_bytes()
+        st.download_button("⬇️ 下载标准模板", data=tpl,
+                           file_name="志愿时长汇总模板.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True, key="teacher_tpl_btn")
+        up2 = st.file_uploader("上传标准模板（xlsx / csv）", type=["xlsx", "csv"],
+                               key="teacher_tpl_up")
+        if up2 is not None:
+            rows, warns = _parse_upload(up2)
+            for w in warns:
+                st.warning(w)
+            if rows:
+                st.caption(f"已解析 {len(rows)} 行，前 5 行预览：")
+                st.dataframe(pd.DataFrame(rows[:5]), use_container_width=True, height=150)
+                if st.button("✔️ 确认导入", use_container_width=True, key="teacher_tpl_import"):
+                    res = import_volunteer_excel(rows)
+                    add_log("import_volunteer_excel", {"来源": "标准模板", "行数": len(rows)}, res)
+                    st.session_state.toast = (
+                        "success" if res.get("status") == "success" else "error",
+                        res.get("message", ""))
+                    st.rerun()
+
+    # ---------- Tab 4 智能助手 ----------
+    with t4:
+        st.caption("🤖 教师视角的智能助手：查时长 / 全员统计 / 待审申请 / 一键生成汇总报告，"
+                   "直接在下方输入框提问，例如「这个月谁的志愿时长最多」")
+        qc1, qc2, qc3, qc4 = st.columns(4)
+        if qc1.button("📊 全员统计", use_container_width=True):
+            st.session_state.pending_teacher_q = "请全员统计一下志愿时长并给出排名。"
+            st.rerun()
+        if qc2.button("⏳ 待审申请", use_container_width=True):
+            st.session_state.pending_teacher_q = "现在有哪些待审核的校外志愿申请？"
+            st.rerun()
+        if qc3.button("📄 生成汇总报告", use_container_width=True):
+            st.session_state.pending_teacher_q = "请生成学生志愿时长汇总 Word 报告。"
+            st.rerun()
+        if qc4.button("🔎 查学生时长", use_container_width=True):
+            st.session_state.pending_teacher_q = "查一下张三的全部志愿记录与时长合计。"
+            st.rerun()
+        if not st.session_state.teacher_chat:
+            st.markdown(
+                '<div class="empty-box"><span class="big">🤖</span>教师智能助手待命中<br>'
+                "支持：查询记录 · 全员统计 · 申请审查情况 · 生成汇总报告</div>",
+                unsafe_allow_html=True)
+        for role, text in st.session_state.teacher_chat:
+            if role == "user":
+                st.markdown(f'<div class="user-bubble">❓ {html.escape(text)}</div>',
+                            unsafe_allow_html=True)
+            else:
+                with st.chat_message("assistant"):
+                    st.markdown(text)
+        if st.session_state.get("last_failed_input"):
+            if st.button("🔄 重试上一次失败的请求", use_container_width=True):
+                h = st.session_state.teacher_chat
+                if h and h[-1][0] == "assistant" and h[-1][1].startswith("⚠️"):
+                    h.pop()
+                if h and h[-1][0] == "user" and h[-1][1] == st.session_state.last_failed_input:
+                    h.pop()
+                q = st.session_state.last_failed_input
+                st.session_state.last_failed_input = None
+                st.session_state.pending_teacher_q = q
+                st.rerun()
 
 
 def render_sidebar():
@@ -3580,7 +4031,7 @@ def render_sidebar():
             st.session_state.excel_file = None
             st.session_state.extra_accounts = []
             st.session_state.import_preview = None
-            st.session_state.applications = []            # 申请队列
+            st.session_state.applications = _demo_applications()   # 申请队列（预置演示申请）
             st.session_state.teacher_chat = []
             st.session_state.word_file = None
             st.session_state.teacher_unlocked = False
@@ -3735,13 +4186,26 @@ def main():
         st.error("未检测到 DASHSCOPE_API_KEY，请复制 .env.example 为 .env 并填入你的 API Key 后重启。")
         st.stop()
 
+    # ===== 教师已解锁：整页切换为独立的教师工作台（不显示学生界面） =====
+    if st.session_state.get("teacher_unlocked"):
+        render_teacher_console()
+        user_input = st.chat_input("💬 向教师助手提问：查时长 / 全员统计 / 待审申请 / 生成汇总报告")
+        pending_q = st.session_state.pop("pending_teacher_q", "") or user_input
+        if pending_q:
+            with st.chat_message("user"):
+                st.markdown(pending_q)
+            with st.status(f"🤖 {MODEL_NAME} 正在思考...", expanded=True) as status:
+                run_teacher_agent(pending_q, status)
+            st.rerun()
+        return
+
+    # ===== 学生 / 志愿者页面 =====
     render_header()
     render_sidebar()          # 先渲染侧栏，账号/口径在本次运行就已确定
 
     n_pending = len([a for a in st.session_state.applications if a["状态"] == APP_PENDING])
     tab_ai, tab_apply, tab_teacher = st.tabs([
         "🤖 智能助手", f"📝 校外时长申请", f"🎓 教师工作台" + (f" · {n_pending} 新" if n_pending else "")])
-
     with tab_ai:
         render_stats()            # KPI 卡：始终为本人数据，随录入/切换账号实时更新
         if st.session_state.get("show_my_records"):

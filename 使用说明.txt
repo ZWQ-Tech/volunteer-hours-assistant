@@ -167,7 +167,7 @@
     .env.example              环境变量模板（不含真实密钥；TEACHER_KEY 为教师工作台密钥）
     .gitignore                版本管理排除规则
     .streamlit/config.toml    页面主题配置
-    slide.html                汇报幻灯片 · 精简版 12 页（双击打开）
+    slide.html                汇报幻灯片 · 精简版 13 页（双击打开）
     slide_full.html           原详版 15 页（备用，含代码与技术栈页）
     slide.md                  精简版 Marp 源文件
     README.md                 项目文档

@@ -280,10 +280,10 @@ volunteer-hours-assistant/
 ├── .gitignore          # 排除 .venv/__pycache__/.env/数据文件等
 ├── .streamlit/
 │   └── config.toml     # 浅色主题与服务配置
-├── slide.html          # 汇报幻灯片 · 精简版 12 页（双击浏览器打开）
+├── slide.html          # 汇报幻灯片 · 精简版 13 页（双击浏览器打开）
 ├── slide_full.html     # 详版 15 页（含代码页 / 技术栈对比，备用）
 ├── slide.md            # 精简版 Marp 源文件，可再导出 PDF
-├── 演讲稿.md            # 按 12 页逐页对应的答辩讲稿（含 Q&A 十问）
+├── 演讲稿.md            # 按 13 页逐页对应的答辩讲稿（含 Q&A 十问）
 ├── 使用说明.txt         # 面向使用者的四步操作说明
 └── README.md           # 本文档
 ```

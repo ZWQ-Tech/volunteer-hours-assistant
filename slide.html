@@ -312,7 +312,7 @@
       </div>
     </div>
     <div class="memo"><b>约 50 秒：</b>先说个场景。期末评奖学金，辅导员要在群里收志愿记录，一条条 Excel、微信截图、纸质证明都有。收上来先统一格式，再按日期筛，再一个人一个人加，最后做成汇总表。<br>关键在于——只要中间有一个人补交，前面全白做。这就是我想自动化它的原因。</div>
-    <div class="pageno"><span class="pn">2</span> / 12</div>
+    <div class="pageno"><span class="pn">2</span> / 13</div>
   </section>
 
   <!-- ================= 03 核心思路 ================= -->
@@ -347,7 +347,7 @@
       </div>
     </div>
     <div class="memo"><b>约 60 秒，全场最重要一页：</b>这一页讲不清，后面全听不懂。<br>打个比方：模型是餐厅服务员，负责听懂你要什么、告诉后厨；它不会自己下厨。真正炒菜的是工具。<br>为什么要这么分？因为大模型最不擅长的就是精确计算。你让它加 20 个小数，它每次结果都不一样。所以我给它划了条线——你只管决定调谁，数字一个都不许你自己编。</div>
-    <div class="pageno"><span class="pn">3</span> / 12</div>
+    <div class="pageno"><span class="pn">3</span> / 13</div>
   </section>
 
   <!-- ================= 04 跑一遍 ================= -->
@@ -385,7 +385,7 @@
       </div>
     </div>
     <div class="memo"><b>约 55 秒：</b>这句话进来之后发生了什么？<br>模型先理解：时间范围是 10 月 1 号到 31 号，范围是全员。然后它说，我要调查询工具。代码去查，返回 12 条。<br>模型看到 12 条记录，接着说，我要调统计工具。代码算完给回来。模型再接着说，调导出工具。<br>整个过程像个传话游戏，但每一棒都是它自己决定交给谁的。</div>
-    <div class="pageno"><span class="pn">4</span> / 12</div>
+    <div class="pageno"><span class="pn">4</span> / 13</div>
   </section>
 
   <!-- ================= 05 六个工具 ================= -->
@@ -414,7 +414,7 @@
       </div>
     </div>
     <div class="memo"><b>约 55 秒：</b>八个工具分三拨看。<br>前四个是"账本"：查、算、分开算、导出。为什么"分开算"要单独做一个？因为如果让模型先查总数、再自己相减，它就会算错，所以我干脆让工具一次性把三个数字都给它。<br>中间两个是"找活动"：一个查，一个记。<br>最后两个是新加的"院级汇总"：负责人把汇总 Excel 传上来，时长自动加到每个同学名下；再一键出全院排名。</div>
-    <div class="pageno"><span class="pn">5</span> / 12</div>
+    <div class="pageno"><span class="pn">5</span> / 13</div>
   </section>
 
   <!-- ================= 06 一段代码 ================= -->
@@ -447,7 +447,7 @@
       </div>
     </div>
     <div class="memo"><b>约 45 秒：</b>左边这个函数是第 3 个工具，叫 calc_hours_by_type。<br>用户问"我校内校外分别多少"，模型只决定调用这个工具，参数几乎不用传。<br>里面所有加减乘除都是 pandas 在真实数据上算的——它没机会幻觉。返回的 JSON 模型直接念给用户听就行。<br>这就是为什么我们敢说"项目里每个数字都能回溯到原始记录"。</div>
-    <div class="pageno"><span class="pn">6</span> / 12</div>
+    <div class="pageno"><span class="pn">6</span> / 13</div>
   </section>
 
   <!-- ================= 07 校内外分开 ================= -->
@@ -474,7 +474,7 @@
       </div>
     </div>
     <div class="memo"><b>约 45 秒：</b>这个功能是做到一半才改的。原来只有两张卡：几条记录、多少小时。但真实场景里，校内校外是两套认定标准，混着算没法用。<br>所以我改成四张卡。最大这张深色的就是总时长，下面一根细条是校内校外的占比，一眼能看出这个人主要在校内还是校外做。<br>乘一句：这三个数字是互相关联的，总时长一定等于校内加校外，不会打架。</div>
-    <div class="pageno"><span class="pn">7</span> / 12</div>
+    <div class="pageno"><span class="pn">7</span> / 13</div>
   </section>
 
   <!-- ================= 07 全国查活动 ================= -->
@@ -505,13 +505,44 @@
       </div>
     </div>
     <div class="memo"><b>约 45 秒：</b>第二个功能是找活动。原来只能看上海，因为我自己在上海。但别的城市的同学就没法用。<br>所以我接了开源数据集，把全国 34 个省、368 个市、3078 个区县都放进去了，学校也能搜到 1308 所。<br>这里要说清楚：省市区县和学校是真的，活动内容是按地区模板生成的演示数据，不能当成真实活动信息。</div>
-    <div class="pageno"><span class="pn">8</span> / 12</div>
+    <div class="pageno"><span class="pn">8</span> / 13</div>
+  </section>
+
+  <!-- ================= 09 申请审核闭环 ================= -->
+  <section class="slide" style="--ac:#7C3AED">
+    <div class="hd">
+      <div class="kicker rv">09 · 功能三</div>
+      <h2 class="rv" style="--d:.08s">校外时长要<em>申请 + 审核</em>，才算数</h2>
+      <div class="dek rv" style="--d:.16s">学生交材料 → 老师密钥进独立工作台 → 通过自动计时，退回必写原因</div>
+    </div>
+    <div class="wrap">
+      <div class="pickers rv" style="--d:.22s">
+        <div class="pk"><div class="pl">① 学生</div><div class="pv">提交申请</div></div>
+        <div class="arw">→</div>
+        <div class="pk"><div class="pl">② 证明材料</div><div class="pv">照片 / PDF</div></div>
+        <div class="arw">→</div>
+        <div class="pk"><div class="pl">③ 老师审核</div><div class="pv">密钥进入</div></div>
+        <div class="arw">→</div>
+        <div class="pk" style="min-width:9.5rem"><div class="pl">④ 结果</div><div class="pv">✅ 计入 / 🔴 退回</div></div>
+      </div>
+      <div class="kpis rv" style="--d:.32s">
+        <div class="kpi"><div class="v">🔐</div><div class="k">教师独立工作台<br>学生页面看不到</div></div>
+        <div class="kpi"><div class="v">🤖</div><div class="k">AI 识别文档<br>批量导入时长</div></div>
+        <div class="kpi"><div class="v">💬</div><div class="k">教师智能助手<br>查记录 · 统计 · 出报告</div></div>
+        <div class="kpi"><div class="v">📄</div><div class="k">一键导出 Word<br>按学院 · 专业分组</div></div>
+      </div>
+      <div class="note rv" style="--d:.42s">
+        待审核前<b>不计入时长</b>；退回原因学生端直接可见；同一申请不能重复处理。
+      </div>
+    </div>
+    <div class="memo"><b>约 45 秒：</b>第三个功能是管理闭环。校外时长学生自己说了不算，要走申请。<br>学生在页面上填活动、传证明材料，提交后是待审核状态——这时候不算时长。老师输入密钥，进入一个完全独立的教师工作台，学生界面都看不到。<br>里面每条申请一张卡：材料直接预览，点通过就自动加进这位同学的校外时长；退回必须填原因，学生会看到。<br>老师还能把任意格式的汇总文档交给 AI 识别批量导入，有教师版智能助手，还能一键出按学院专业分组的 Word 汇总报告。</div>
+    <div class="pageno"><span class="pn">9</span> / 13</div>
   </section>
 
   <!-- ================= 08 真实对话 ================= -->
   <section class="slide" style="--ac:#2563EB">
     <div class="hd">
-      <div class="kicker rv">09 · 现场演示</div>
+      <div class="kicker rv">10 · 现场演示</div>
       <h2 class="rv" style="--d:.08s">现在试三个问题</h2>
       <div class="dek rv" style="--d:.16s">每一句话下面都会冒出工具日志，能看到它到底调了什么</div>
     </div>
@@ -544,13 +575,13 @@
       </div>
     </div>
     <div class="memo"><b>这页是演示页，约 2 分钟：</b>三句话现场敲，不要念答案，让 AI 自己出。<br>敲之前先提醒老师看页面下方那一栏——工具日志，那里会显示调了哪个函数、传了什么参数、返回几条。<br>如果网络卡了，切到第 3 句，那句最稳。</div>
-    <div class="pageno"><span class="pn">9</span> / 12</div>
+    <div class="pageno"><span class="pn">10</span> / 13</div>
   </section>
 
   <!-- ================= 09 三个坑 ================= -->
   <section class="slide" style="--ac:#E11D48">
     <div class="hd">
-      <div class="kicker rv">10 · 踩的坑</div>
+      <div class="kicker rv">11 · 踩的坑</div>
       <h2 class="rv" style="--d:.08s">三个 bug，<em>光看代码发现不了</em></h2>
       <div class="dek rv" style="--d:.16s">都是真的跑起来、真的问一遍才暴露的</div>
     </div>
@@ -577,13 +608,13 @@
       </div>
     </div>
     <div class="memo"><b>约 60 秒，这页最能体现你真做过：</b>重点讲第三个。前两个是技术 bug，第三个是"逻辑上没错但业务上很傻"。<br>当时我问"成都武侯区有什么活动"，它答得挺像样，但结尾来一句"按距你所在校区由近到远排序"。成都离上海一千七百公里，这个排序毫无意义。<br>这说明只跑单元测试是不够的，得拿真人会问的话去问它。</div>
-    <div class="pageno"><span class="pn">10</span> / 12</div>
+    <div class="pageno"><span class="pn">11</span> / 13</div>
   </section>
 
   <!-- ================= 10 不足与下一步 ================= -->
   <section class="slide" style="--ac:#7C3AED">
     <div class="hd">
-      <div class="kicker rv">11 · 反思</div>
+      <div class="kicker rv">12 · 反思</div>
       <h2 class="rv" style="--d:.08s">还差什么，<em>下一步做什么</em></h2>
       <div class="dek rv" style="--d:.16s">不藏着，这三条是最需要补的</div>
     </div>
@@ -611,13 +642,13 @@
       </div>
     </div>
     <div class="memo"><b>约 35 秒：</b>这页我讲得快一点。<br>最大问题是数据没存下来，关掉就没了；其次是没有权限，谁都能改。活动数据也是模拟的。<br>这几条我心里很清楚，所以没打算把它包装成"成品系统"。</div>
-    <div class="pageno"><span class="pn">11</span> / 12</div>
+    <div class="pageno"><span class="pn">12</span> / 13</div>
   </section>
 
   <!-- ================= 11 结尾 ================= -->
   <section class="slide" style="--ac:#2563EB">
     <div class="hd">
-      <div class="kicker rv">12 · 小结</div>
+      <div class="kicker rv">13 · 小结</div>
       <h2 class="rv" style="--d:.08s">模型负责听懂，代码负责算准</h2>
     </div>
     <div class="wrap">
@@ -639,7 +670,7 @@
       </div>
     </div>
     <div class="memo"><b>结尾 20 秒：</b>最后收一句：这个项目的核心就一句话——模型负责听懂，代码负责算准。<br>八个工具、多轮调用、每个数字能回溯，Tool Calling 该有的都跑通了。<br>谢谢老师，欢迎提问。</div>
-    <div class="pageno"><span class="pn">12</span> / 12</div>
+    <div class="pageno"><span class="pn">13</span> / 13</div>
   </section>
 
 </div>
