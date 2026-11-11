@@ -16,6 +16,7 @@
 """
 
 import html
+import inspect
 import io
 import json
 import os
@@ -57,6 +58,9 @@ TEACHER_KEY = os.getenv("TEACHER_KEY", "sanda2026")   # 教师工作台解锁密
 SYSTEM_PROMPT = (
     "你是校园志愿服务时长管理助手。用户会用自然语言提出查询、统计、导出、查找活动等需求，"
     "你必须优先调用提供的工具完成业务操作，禁止编造数据。"
+    "时间范围规则（重要）：只有用户明确提到时间（今天/昨天/本周/本月/9月以来等）才换算成 YYYY-MM-DD 传给工具；"
+    "用户没有提到时间范围时，统计、汇总、查询一律省略 start_date / end_date 参数，让工具查询全部历史记录，"
+    "千万不要自行默认只查某一天——那样几乎总是空结果。"
     "调用工具前，先根据对话上下文把用户的相对时间（如'本月'、'上周'）换算成 YYYY-MM-DD 格式。"
     "工具返回 status 为 error 时，请把原因友好地转述给用户并给出修正建议；"
     "返回 status 为 empty 时，提示该条件下没有查到数据。"
@@ -338,15 +342,22 @@ def _parse_date(text):
         return None
 
 
-def query_volunteer_data(start_date: str, end_date: str, project_name: str = "",
+def query_volunteer_data(start_date: str = "", end_date: str = "", project_name: str = "",
                          scope: str = "me", kind: str = "") -> dict:
     """工具1：按起止日期查询志愿记录。
+    start_date / end_date 可省略——省略时查询全部历史记录（避免模型没拿到
+    时间范围时胡乱猜"只查今天"导致永远空结果）。
     scope=me 只查当前绑定账号本人的记录（默认，与页面记录口径保持一致）；
     scope=all 查全部成员记录。project_name 为可选的项目名称筛选关键字；
     kind 可选「校内 / 校外」，用于只看某一类记录。"""
-    d1, d2 = _parse_date(start_date), _parse_date(end_date)
-    if d1 is None or d2 is None:
-        return {"status": "error", "message": "日期格式不正确，请使用 YYYY-MM-DD 格式，例如 2026-09-01。"}
+    d1, d2 = date.min, date.max          # 默认：全部历史
+    if start_date or end_date:           # 用户指定了至少一端，才做日期过滤
+        if start_date and _parse_date(start_date) is None:
+            return {"status": "error", "message": f"起始日期「{start_date}」格式不正确，请用 YYYY-MM-DD。"}
+        if end_date and _parse_date(end_date) is None:
+            return {"status": "error", "message": f"结束日期「{end_date}」格式不正确，请用 YYYY-MM-DD。"}
+        d1 = _parse_date(start_date) or date.min
+        d2 = _parse_date(end_date) or date.max
     if d2 < d1:
         return {"status": "error", "message": f"结束日期({end_date})早于起始日期({start_date})，请调整后重新查询。"}
 
@@ -378,12 +389,15 @@ def query_volunteer_data(start_date: str, end_date: str, project_name: str = "",
     result = df[mask].drop(columns=["日期date"])
 
     if result.empty:
-        tip = f"{start_date} 至 {end_date}" + (f"（项目含“{project_name}”）" if project_name else "")
+        tip = (f"{start_date} 至 {end_date}" if (start_date or end_date) else "全部历史") \
+            + (f"（项目含“{project_name}”）" if project_name else "")
         return {
             "status": "empty",
             "scope": "all" if want_all else "me",
             "owner": owner_label,
-            "message": f"{owner_label}在 {tip} 时间范围内没有{kind_sel or ''}志愿记录。",
+            "message": f"{owner_label}在 {tip} 时间范围内没有{kind_sel or ''}志愿记录。"
+                       + ("若用户没有指定时间范围，请省略 start_date / end_date 参数重新查询全部历史后再回答。"
+                          if (start_date or end_date) else ""),
             "records": [],
         }
 
@@ -1101,12 +1115,12 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "query_volunteer_data",
-            "description": "按起止日期查询校园志愿记录；可用 project_name 按项目名筛选，用 scope 指定本人或全员，用 kind 只看校内或校外。",
+            "description": "按起止日期查询校园志愿记录；可用 project_name 按项目名筛选，用 scope 指定本人或全员，用 kind 只看校内或校外。用户没有提到时间时，请省略 start_date / end_date，工具会查询全部历史记录。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start_date": {"type": "string", "description": "起始日期，格式 YYYY-MM-DD"},
-                    "end_date": {"type": "string", "description": "结束日期，格式 YYYY-MM-DD"},
+                    "start_date": {"type": "string", "description": "可选。起始日期，格式 YYYY-MM-DD；用户没提时间就省略"},
+                    "end_date": {"type": "string", "description": "可选。结束日期，格式 YYYY-MM-DD；用户没提时间就省略"},
                     "project_name": {"type": "string", "description": "可选。志愿项目名称关键字，不需要时省略"},
                     "scope": {
                         "type": "string",
@@ -1119,7 +1133,6 @@ TOOLS_SCHEMA = [
                         "description": "可选。只看某一类记录：校内 / 校外；不传则两类都查",
                     },
                 },
-                "required": ["start_date", "end_date"],
             },
         },
     },
@@ -1289,16 +1302,40 @@ def add_log(tool_name: str, args: dict, result: dict):
     )
 
 
+def _fix_tool_args(name: str, args: dict) -> dict:
+    """修正模型常见的参数名混淆（跨工具记忆串了参数名），尽量让一次调用就成功。"""
+    if name == "calc_hours_by_type":
+        # 正确参数只有 scope / start_date / end_date；模型常把 query 工具的 kind 传进来
+        for wrong in ("kind", "type", "类型"):
+            if wrong in args:
+                v = str(args.pop(wrong)).strip()
+                if v.lower() in ("all", "全员", "everyone", "team") and "scope" not in args:
+                    args["scope"] = v          # 想看全员口径
+                # 传的是「校内/校外」→ 属于默认个人口径，直接丢弃即可，不影响 scope=me
+    if name == "query_volunteer_data":
+        v = str(args.get("scope", "")).strip()
+        if v in ("校内", "校外"):               # scope 传成了类型值 → 挪到 kind
+            args.pop("scope")
+            args["kind"] = v
+        for wrong in ("type", "类型"):
+            if wrong in args:
+                args["kind"] = args.pop(wrong)
+    return args
+
+
 def execute_tool(name: str, args: dict) -> dict:
     """统一工具调度入口：执行工具并写日志"""
     fn = TOOL_IMPL.get(name)
     if fn is None:
         result = {"status": "error", "message": f"未知工具：{name}"}
     else:
+        args = _fix_tool_args(name, dict(args))
         try:
             result = fn(**args)
         except TypeError as e:
-            result = {"status": "error", "message": f"工具参数不匹配：{e}"}
+            valid = list(inspect.signature(fn).parameters)
+            result = {"status": "error",
+                      "message": f"工具参数不匹配：{e}。该工具支持的参数为 {valid}，请修正参数名后重试。"}
         except Exception as e:
             result = {"status": "error", "message": f"工具执行异常：{e}"}
     add_log(name, args, result)
